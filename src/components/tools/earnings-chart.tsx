@@ -23,6 +23,7 @@ import {
   getChartTickTextAnchor,
   getResponsiveChartDimensions,
 } from '@/lib/chart-layout';
+import { getChartViewportTicks } from '@/lib/chart-viewport';
 import {
   earningsActivityCatalog,
   type EarningsActivityId,
@@ -57,6 +58,7 @@ import { createNumberFormatter, type NumberFormatter } from '@/lib/number-format
 import { getMessages } from '@/lib/translations';
 
 import type { EarningsOverviewToolLabels } from './earnings-overview';
+import { ChartViewportControls, useChartViewport } from './chart-viewport';
 
 interface EarningsChartSeriesStyle {
   readonly color: string;
@@ -111,9 +113,7 @@ function formatTemplate(
 }
 
 function getLevelTicks(min: number, max: number): readonly number[] {
-  return Array.from({ length: 5 }, (_, index) =>
-    Math.round(min + (max - min) * index / 4),
-  );
+  return getChartViewportTicks({ min, max }).map(Math.round);
 }
 
 function getLinePath(
@@ -144,13 +144,35 @@ function getPointFromClientX(
   chartWidth: number,
   left: number,
   plotWidth: number,
+  viewport: { readonly min: number; readonly max: number },
 ) {
   const bounds = svg?.getBoundingClientRect();
   if (!bounds || data.points.length === 0) return null;
 
   const viewBoxX = ((clientX - bounds.left) / Math.max(1, bounds.width)) * chartWidth;
   const ratio = Math.max(0, Math.min(1, (viewBoxX - left) / plotWidth));
-  return Math.round(ratio * (data.points.length - 1));
+  const level = viewport.min + ratio * (viewport.max - viewport.min);
+  return Math.max(0, Math.min(data.points.length - 1, Math.round(level - data.minLevel)));
+}
+
+function isClientPointInChartPlot(
+  clientX: number,
+  clientY: number,
+  svg: SVGSVGElement,
+  chartWidth: number,
+  chartHeight: number,
+  left: number,
+  top: number,
+  plotWidth: number,
+  plotHeight: number,
+) {
+  const bounds = svg.getBoundingClientRect();
+  const x = (clientX - bounds.left) / Math.max(1, bounds.width) * chartWidth;
+  const y = (clientY - bounds.top) / Math.max(1, bounds.height) * chartHeight;
+  return x >= left
+    && x <= left + plotWidth
+    && y >= top
+    && y <= top + plotHeight;
 }
 
 function getViewBoxYFromClientY(
@@ -337,17 +359,21 @@ function EarningsChartSvg({
   const chartDimensions = getEarningsChartDimensions(containerWidth);
   const plotWidth = chartDimensions.width - chartDimensions.left - chartDimensions.right;
   const plotHeight = chartDimensions.height - chartDimensions.top - chartDimensions.bottom;
-  const levelRange = Math.max(1, data.maxLevel - data.minLevel);
+  const chartDomain = { min: data.minLevel, max: data.maxLevel };
+  const viewportControls = useChartViewport(chartDomain);
+  const visibleMinLevel = viewportControls.viewport.min;
+  const visibleMaxLevel = viewportControls.viewport.max;
+  const levelRange = Math.max(1, visibleMaxLevel - visibleMinLevel);
   const yScale = useMemo(
     () => getEarningsChartYScale(data, visibleActivityIds),
     [data, visibleActivityIds],
   );
   const yDomain = yScale.domain;
-  const levelTicks = getLevelTicks(data.minLevel, data.maxLevel);
+  const levelTicks = getLevelTicks(visibleMinLevel, visibleMaxLevel);
   const valueTicks = getEarningsChartYScaleTicks(yScale);
   const activePoint = data.points[activePointIndex]!;
   const xForLevel = (level: number) =>
-    chartDimensions.left + (level - data.minLevel) / levelRange * plotWidth;
+    chartDimensions.left + (level - visibleMinLevel) / levelRange * plotWidth;
   const transformedYMin = transformEarningsChartYValue(yDomain.min, yScale);
   const transformedYMax = transformEarningsChartYValue(yDomain.max, yScale);
   const yForValue = (value: number) => chartDimensions.top
@@ -423,16 +449,31 @@ function EarningsChartSvg({
     onHoverPoint(null);
     onHoverSeries(null);
     const direction = event.key === 'ArrowRight' ? 1 : -1;
-    onKeyboardPoint(Math.max(0, Math.min(data.points.length - 1, activePointIndex + direction)));
+    const nextIndex = Math.max(0, Math.min(data.points.length - 1, activePointIndex + direction));
+    const nextPoint = data.points[nextIndex];
+    if (nextPoint) viewportControls.ensureLevelVisible(nextPoint.level);
+    onKeyboardPoint(nextIndex);
   };
 
   return (
     <div
       ref={chartContainerRef}
-      className="w-full min-w-[40rem]"
+      className="w-full min-w-0"
       data-comparison-mode={data.comparisonMode}
       data-visible-series-count={visibleActivityIds.length}
     >
+      <ChartViewportControls
+        locale={locale}
+        canZoomIn={viewportControls.canZoomIn}
+        canZoomOut={viewportControls.canZoomOut}
+        isFullRange={viewportControls.isFullRange}
+        viewport={viewportControls.viewport}
+        sliderValue={viewportControls.sliderValue}
+        onZoomIn={viewportControls.zoomIn}
+        onZoomOut={viewportControls.zoomOut}
+        onReset={viewportControls.reset}
+        onSliderChange={viewportControls.onSliderChange}
+      />
       {yScale.mode === 'symlog' ? (
         <p
           className="mb-2 text-xs leading-5 text-muted-foreground"
@@ -457,6 +498,8 @@ function EarningsChartSvg({
         aria-label={`${formatTemplate(labels.trendSelectedLevel, { level: activePoint.level })}，${accessibleValueSummary}`}
         viewBox={`0 0 ${chartDimensions.width} ${chartDimensions.height}`}
         data-chart-width={chartDimensions.width}
+        data-chart-x-min={visibleMinLevel}
+        data-chart-x-max={visibleMaxLevel}
         data-chart-point-count={data.points.length}
         data-chart-series-count={data.activityIds.length}
         data-chart-tick-count={levelTicks.length}
@@ -466,7 +509,34 @@ function EarningsChartSvg({
         data-chart-y-scale={yScale.mode}
         data-active-level={activePoint.level}
         className="block h-auto w-full rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
-        onFocus={() => onKeyboardPoint(activePointIndex)}
+        style={{ touchAction: 'pan-y pinch-zoom' }}
+        onClick={(event) => {
+          if (event.detail === 0 || !isClientPointInChartPlot(
+            event.clientX,
+            event.clientY,
+            event.currentTarget,
+            chartDimensions.width,
+            chartDimensions.height,
+            chartDimensions.left,
+            chartDimensions.top,
+            plotWidth,
+            plotHeight,
+          )) return;
+          const index = getPointFromClientX(
+            event.clientX,
+            event.currentTarget,
+            data,
+            chartDimensions.width,
+            chartDimensions.left,
+            plotWidth,
+            viewportControls.viewport,
+          );
+          if (index !== null) onSelectPoint(index);
+        }}
+        onFocus={() => {
+          viewportControls.ensureLevelVisible(activePoint.level);
+          onKeyboardPoint(activePointIndex);
+        }}
         onBlur={() => onKeyboardPoint(null)}
         onKeyDown={handleKeyDown}
       >
@@ -677,6 +747,7 @@ function EarningsChartSvg({
               chartDimensions.width,
               chartDimensions.left,
               plotWidth,
+              viewportControls.viewport,
             );
             if (index === null) {
               onHoverPoint(null);
@@ -719,6 +790,7 @@ function EarningsChartSvg({
               chartDimensions.width,
               chartDimensions.left,
               plotWidth,
+              viewportControls.viewport,
             );
             if (index !== null) onSelectPoint(index);
           }}
@@ -939,8 +1011,8 @@ export function EarningsTrendChart({
                 ) : (
                   <>
                     <div
-                      className="w-full min-w-0 max-w-full overflow-x-auto"
-                      data-chart-scroll-container="true"
+                      className="w-full min-w-0 max-w-full"
+                      data-chart-region="true"
                       role="region"
                       aria-label={labels.trendTitle}
                     >

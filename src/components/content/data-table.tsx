@@ -1,4 +1,4 @@
-import type { ComponentPropsWithoutRef, ReactNode } from 'react';
+import type { ComponentPropsWithoutRef, CSSProperties, ReactNode } from 'react';
 
 import { cn } from '@/lib/cn';
 
@@ -10,6 +10,7 @@ export type DataTableColumn =
       id?: string;
       label: ReactNode;
       align?: DataTableAlign;
+      width?: CSSProperties['width'];
     };
 
 export type DataTableProps = Omit<ComponentPropsWithoutRef<'div'>, 'children'> & {
@@ -19,6 +20,8 @@ export type DataTableProps = Omit<ComponentPropsWithoutRef<'div'>, 'children'> &
   ariaLabel?: string;
   emptyMessage?: ReactNode;
   rowHeader?: boolean;
+  stickyFirstColumn?: boolean;
+  tableClassName?: string;
 };
 
 function getColumn(column: DataTableColumn) {
@@ -42,6 +45,8 @@ export function DataTable({
   ariaLabel,
   emptyMessage = 'No data available.',
   rowHeader = false,
+  stickyFirstColumn = true,
+  tableClassName,
   className,
   ...props
 }: DataTableProps) {
@@ -54,12 +59,23 @@ export function DataTable({
     >
       <table
         aria-label={caption ? undefined : ariaLabel ?? 'Data table'}
-        className="min-w-full text-left text-sm"
+        data-sticky-first-column={stickyFirstColumn ? undefined : 'false'}
+        className={cn('min-w-full text-left text-sm', tableClassName)}
       >
         {caption ? (
           <caption className="border-b px-4 py-3 text-left font-medium text-fd-foreground">
             {caption}
           </caption>
+        ) : null}
+        {normalizedColumns.some((column) => column.width !== undefined) ? (
+          <colgroup>
+            {normalizedColumns.map((column, index) => (
+              <col
+                key={column.id ?? index}
+                style={column.width !== undefined ? { width: column.width } : undefined}
+              />
+            ))}
+          </colgroup>
         ) : null}
         <thead className="bg-fd-card">
           <tr className="border-b">

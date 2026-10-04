@@ -12,6 +12,11 @@ import {
   ToolEmbed,
 } from './content';
 
+function MarkdownTable(props: ComponentProps<'table'>) {
+  const Table = defaultMdxComponents.table;
+  return <Table {...props} data-markdown-table="" />;
+}
+
 function ArticleH1({ className, ...props }: ComponentProps<'h1'>) {
   const Heading = defaultMdxComponents.h1;
   return (
@@ -34,12 +39,24 @@ function ArticleH2({ className, ...props }: ComponentProps<'h2'>) {
   );
 }
 
+function ArticleH3({ className, ...props }: ComponentProps<'h3'>) {
+  const Heading = defaultMdxComponents.h3;
+  return (
+    <Heading
+      {...props}
+      className={[className, 'site-article-heading'].filter(Boolean).join(' ')}
+      data-site-article-heading=""
+    />
+  );
+}
+
 export function getMDXComponents(
   components?: MDXComponents,
   options: { articleHeadings?: boolean } = {},
 ) {
   return {
     ...defaultMdxComponents,
+    table: MarkdownTable,
     Callout,
     DataTable,
     GameDataVersionTable,
@@ -48,7 +65,9 @@ export function getMDXComponents(
     GameTerm,
     Image,
     ToolEmbed,
-    ...(options.articleHeadings ? { h1: ArticleH1, h2: ArticleH2 } : {}),
+    ...(options.articleHeadings
+      ? { h1: ArticleH1, h2: ArticleH2, h3: ArticleH3 }
+      : {}),
     ...components,
   } satisfies MDXComponents;
 }

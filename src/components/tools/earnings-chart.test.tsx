@@ -27,6 +27,7 @@ import { createNumberFormatter } from '@/lib/number-formatting';
 import { defaultSharedUserInputs } from '@/lib/storage';
 import { getMessages } from '@/lib/translations';
 
+import { ChartViewportControls, useChartViewport } from './chart-viewport';
 import { EarningsTrendChart, getEarningsChartDimensions } from './earnings-chart';
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean })
@@ -74,13 +75,14 @@ afterEach(() => {
 });
 
 describe('Earnings trend chart', () => {
-  it('縮減 desktop 與窄畫布 gutter，同時保留長負數刻度空間', () => {
+  it('依容器寬度配置 desktop 與窄畫布，保留長負數刻度空間', () => {
     const compact = getEarningsChartDimensions(360);
+    const mobile = getEarningsChartDimensions(320);
     const desktop = getEarningsChartDimensions(960);
 
     expect(compact).toMatchObject({
-      width: 640,
-      height: 320,
+      width: 360,
+      height: 180,
       left: 44,
       right: 8,
       top: 28,
@@ -94,7 +96,8 @@ describe('Earnings trend chart', () => {
       top: 32,
       bottom: 62,
     });
-    expect(compact.width - compact.left - compact.right).toBeGreaterThan(566);
+    expect(mobile).toMatchObject({ width: 320, height: 160 });
+    expect(compact.width - compact.left - compact.right).toBeGreaterThan(300);
     expect(desktop.width - desktop.left - desktop.right).toBeGreaterThan(858);
     expect(compact.left - chartYAxisTickGap).toBeGreaterThanOrEqual(
       chartYAxisTickLabelReserve,
@@ -104,7 +107,7 @@ describe('Earnings trend chart', () => {
     )).toBeLessThanOrEqual(compact.left - chartYAxisTickGap);
   });
 
-  it('呈現 800 個等級、預設變動收益系列、兩個檢視與 40rem 橫向畫布', () => {
+  it('呈現 800 個等級、預設變動收益系列、兩個檢視與容器自適應畫布', () => {
     const markup = renderToStaticMarkup(chart('per-minute'));
 
     expect(markup).toContain('data-earnings-chart="true"');
@@ -114,8 +117,14 @@ describe('Earnings trend chart', () => {
     expect(markup).toContain(`data-visible-series-count="${defaultEarningsChartVisibleActivityIds.length}"`);
     expect(markup).toContain('data-chart-tick-count="5"');
     expect(markup).toContain('data-chart-y-tick-count="5"');
-    expect(markup).toContain('min-w-[40rem]');
-    expect(markup).toContain('overflow-x-auto');
+    expect(markup).not.toContain('min-w-[40rem]');
+    expect(markup).toContain('data-chart-viewport-controls="true"');
+    expect(markup).toContain('data-chart-viewport-slider="true"');
+    expect(markup).toContain('目前可見等級範圍: 1–800');
+    expect(markup).toContain('size-11');
+    expect(markup).toContain('data-chart-x-min="1"');
+    expect(markup).toContain('data-chart-x-max="800"');
+    expect(markup).toContain('pan-y pinch-zoom');
     expect(markup).not.toContain('type="checkbox"');
     expect(markup).toContain('data-earnings-chart-group-scroll="true"');
     expect(markup).not.toContain('trendGroupBoxes');
@@ -134,7 +143,16 @@ describe('Earnings trend chart', () => {
     expect(markup).toContain('data-earnings-chart-legend-reference="yellow-box"');
     const parsed = document.createElement('div');
     parsed.innerHTML = markup;
+    const chartRegion = parsed.querySelector('[data-chart-region]');
+    const viewportSlider = parsed.querySelector('[data-chart-viewport-slider]');
+    const viewportButtons = parsed.querySelector('[data-chart-viewport-action="zoom-in"]')
+      ?.parentElement;
     expect(parsed.querySelectorAll('svg[tabindex="0"]')).toHaveLength(1);
+    expect(viewportSlider?.className).toContain('h-11');
+    expect(viewportSlider?.className).toContain('min-h-11');
+    expect(viewportButtons?.className).toContain('flex-wrap');
+    expect(viewportButtons?.className).toContain('max-w-full');
+    expect(chartRegion?.className).not.toContain('overflow-x-auto');
     const clipPath = parsed.querySelector('svg[tabindex="0"] clipPath');
     const clippedPlot = parsed.querySelector('[data-earnings-chart-clipped-plot="true"]');
     const clipRect = clipPath?.querySelector('rect');
@@ -253,6 +271,7 @@ describe('Earnings trend chart', () => {
     )).toBe('fixed');
     expect(fixedTab.getAttribute('aria-selected')).toBe('true');
     expect(container.querySelector('svg[tabindex="0"]')).toBeNull();
+    expect(container.querySelector('[data-chart-viewport-controls]')).toBeNull();
     expect(container.querySelectorAll('[data-earnings-chart-fixed-row]')).toHaveLength(9);
     expect(Array.from(container.querySelectorAll<HTMLElement>('[data-earnings-chart-fixed-row]'))
       .map((row) => row.getAttribute('data-earnings-chart-fixed-activity')))
@@ -463,6 +482,175 @@ describe('Earnings trend chart', () => {
     });
     expect(container.querySelector('[data-earnings-chart-details]')?.textContent)
       .toContain('Lv.800');
+
+    await unmount(root);
+  });
+
+  it('slider 可移至兩端並重設，圖內拖曳不平移且點選與鍵盤選取仍運作', async () => {
+    const { container, root } = await renderChart();
+    const svg = container.querySelector<SVGSVGElement>('svg[tabindex="0"]')!;
+    const zoomIn = container.querySelector<HTMLButtonElement>(
+      '[data-chart-viewport-action="zoom-in"]',
+    )!;
+    const reset = container.querySelector<HTMLButtonElement>(
+      '[data-chart-viewport-action="reset"]',
+    )!;
+    const slider = container.querySelector<HTMLInputElement>('[data-chart-viewport-slider]')!;
+    const yDomain = [svg.getAttribute('data-chart-y-min'), svg.getAttribute('data-chart-y-max')];
+    expect(slider.disabled).toBe(true);
+
+    await act(async () => zoomIn.click());
+    const zoomedMin = Number(svg.getAttribute('data-chart-x-min'));
+    const zoomedMax = Number(svg.getAttribute('data-chart-x-max'));
+    const zoomedSpan = zoomedMax - zoomedMin;
+    expect(slider.disabled).toBe(false);
+    expect(zoomedSpan).toBeLessThan(799);
+    expect(svg.getAttribute('data-chart-tick-count')).toBe('5');
+    expect(svg.getAttribute('data-chart-y-tick-count')).toBe('5');
+    expect([svg.getAttribute('data-chart-y-min'), svg.getAttribute('data-chart-y-max')])
+      .toEqual(yDomain);
+
+    const setSliderValue = async (value: number) => {
+      await act(async () => {
+        const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+        valueSetter?.call(slider, String(value));
+        slider.dispatchEvent(new Event('input', { bubbles: true }));
+        await Promise.resolve();
+      });
+    };
+
+    await setSliderValue(0);
+    expect(svg.getAttribute('data-chart-x-min')).toBe('1');
+    expect(Number(svg.getAttribute('data-chart-x-max'))).toBeCloseTo(1 + zoomedSpan);
+    expect(Number(slider.value)).toBe(0);
+
+    await setSliderValue(Number(slider.max));
+    expect(Number(svg.getAttribute('data-chart-x-max'))).toBe(800);
+    expect(Number(svg.getAttribute('data-chart-x-min'))).toBeCloseTo(800 - zoomedSpan);
+    expect(Number(slider.value)).toBe(Number(slider.max));
+
+    await setSliderValue(Math.round(Number(slider.max) / 2));
+    const centeredMin = Number(svg.getAttribute('data-chart-x-min'));
+    const centeredMax = Number(svg.getAttribute('data-chart-x-max'));
+    expect(centeredMin).toBeGreaterThan(1);
+    expect(centeredMax).toBeLessThan(800);
+    expect(centeredMax - centeredMin).toBeCloseTo(zoomedSpan);
+
+    Object.defineProperty(svg, 'getBoundingClientRect', {
+      value: () => ({ left: 0, top: 0, width: 960, height: 400 }),
+    });
+    await act(async () => {
+      svg.dispatchEvent(new PointerEvent('pointerdown', {
+        bubbles: true,
+        pointerId: 9,
+        isPrimary: true,
+        button: 0,
+        clientX: 550,
+        clientY: 160,
+      }));
+      svg.dispatchEvent(new PointerEvent('pointermove', {
+        bubbles: true,
+        pointerId: 9,
+        isPrimary: true,
+        clientX: 430,
+        clientY: 160,
+      }));
+      svg.dispatchEvent(new PointerEvent('pointerup', {
+        bubbles: true,
+        pointerId: 9,
+        isPrimary: true,
+        clientX: 430,
+        clientY: 160,
+      }));
+    });
+    expect(Number(svg.getAttribute('data-chart-x-min'))).toBe(centeredMin);
+    expect(Number(svg.getAttribute('data-chart-x-max'))).toBe(centeredMax);
+    expect([svg.getAttribute('data-chart-y-min'), svg.getAttribute('data-chart-y-max')])
+      .toEqual(yDomain);
+
+    const selectedLevel = 400;
+    const clickX = 48 + ((selectedLevel - centeredMin) / (centeredMax - centeredMin)) * 900;
+    await act(async () => {
+      svg.dispatchEvent(new MouseEvent('click', {
+        bubbles: true,
+        detail: 1,
+        clientX: clickX,
+        clientY: 160,
+      }));
+    });
+    expect(svg.getAttribute('data-active-level')).toBe(String(selectedLevel));
+
+    await act(async () => {
+      svg.focus();
+      svg.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'ArrowLeft' }));
+    });
+    const keyboardMin = Number(svg.getAttribute('data-chart-x-min'));
+    const keyboardMax = Number(svg.getAttribute('data-chart-x-max'));
+    expect(svg.getAttribute('data-active-level')).toBe(String(selectedLevel - 1));
+    expect(keyboardMin).toBeLessThanOrEqual(selectedLevel - 1);
+    expect(keyboardMax).toBeGreaterThanOrEqual(selectedLevel - 1);
+    expect(keyboardMax - keyboardMin).toBeCloseTo(zoomedSpan);
+    expect([svg.getAttribute('data-chart-y-min'), svg.getAttribute('data-chart-y-max')])
+      .toEqual(yDomain);
+
+    await act(async () => reset.click());
+    expect(svg.getAttribute('data-chart-x-min')).toBe('1');
+    expect(svg.getAttribute('data-chart-x-max')).toBe('800');
+    expect(slider.disabled).toBe(true);
+    expect(container.querySelector('[data-chart-visible-range]')?.textContent)
+      .toContain('目前可見等級範圍: 1–800');
+    expect(container.querySelector('[data-earnings-chart-fixed]')).toBeNull();
+
+    await unmount(root);
+  });
+
+  it('domain 變更會重設 viewport 與 slider 至新的完整範圍', async () => {
+    function ViewportHarness({ domain }: { domain: { min: number; max: number } }) {
+      const viewport = useChartViewport(domain);
+      return (
+        <>
+          <ChartViewportControls
+            locale="en"
+            canZoomIn={viewport.canZoomIn}
+            canZoomOut={viewport.canZoomOut}
+            isFullRange={viewport.isFullRange}
+            viewport={viewport.viewport}
+            sliderValue={viewport.sliderValue}
+            onZoomIn={viewport.zoomIn}
+            onZoomOut={viewport.zoomOut}
+            onReset={viewport.reset}
+            onSliderChange={viewport.onSliderChange}
+          />
+          <output
+            data-viewport-min={viewport.viewport.min}
+            data-viewport-max={viewport.viewport.max}
+          />
+        </>
+      );
+    }
+
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    await act(async () => root.render(<ViewportHarness domain={{ min: 1, max: 100 }} />));
+
+    const zoomIn = container.querySelector<HTMLButtonElement>(
+      '[data-chart-viewport-action="zoom-in"]',
+    )!;
+    const slider = container.querySelector<HTMLInputElement>('[data-chart-viewport-slider]')!;
+    await act(async () => zoomIn.click());
+    expect(slider.disabled).toBe(false);
+    expect(Number(container.querySelector('output')?.getAttribute('data-viewport-max')))
+      .toBeLessThan(100);
+
+    await act(async () => {
+      root.render(<ViewportHarness domain={{ min: 10, max: 70 }} />);
+    });
+    expect(container.querySelector('output')?.getAttribute('data-viewport-min')).toBe('10');
+    expect(container.querySelector('output')?.getAttribute('data-viewport-max')).toBe('70');
+    expect(slider.disabled).toBe(true);
+    expect(container.querySelector('[data-chart-visible-range]')?.textContent)
+      .toContain('10–70');
 
     await unmount(root);
   });

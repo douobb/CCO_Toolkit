@@ -74,13 +74,20 @@ describe('i18n 設定', () => {
     expect(getMessages('zh-cn').languageSelector.enterSite).toBe('进入网站 →');
     expect(getMessages('zh-cn').translationUnavailable.title).toContain('简体中文');
     expect(getMessages('zh-tw').home.primary.toolsTitle).toBe('Tools');
-    expect(getMessages('zh-tw').home.primary.toolsLink).toBe('查看所有工具');
-    expect(getMessages('zh-tw').home.primary.guidesLink).toBe('瀏覽教學');
-    expect(getMessages('zh-cn').home.primary.toolsLink).toBe('查看所有工具');
-    expect(getMessages('zh-cn').home.primary.guidesLink).toBe('浏览教程');
     expect(getMessages('en').home.primary.guidesTitle).toBe('Guides');
-    expect(getMessages('en').home.primary.toolsLink).toBe('View all tools');
-    expect(getMessages('en').home.primary.guidesLink).toBe('Browse guides');
+    const homepageCopy = {
+      'zh-tw': ['計算收益，規劃升級。', '遊戲入門與進階教學。', '集中管理玩家資料。'],
+      'zh-cn': ['计算收益，规划升级。', '游戏入门与进阶教程。', '集中管理玩家数据。'],
+      en: ['Calculate earnings and plan upgrades.', 'Game guides for beginners and advanced players.', 'Manage player data in one place.'],
+    } as const;
+    for (const locale of ['zh-tw', 'zh-cn', 'en'] as const) {
+      const home = getMessages(locale).home;
+      expect([home.primary.toolsDescription, home.primary.guidesDescription, home.settings.description])
+        .toEqual(homepageCopy[locale]);
+      expect(home.primary).not.toHaveProperty('toolsLink');
+      expect(home.primary).not.toHaveProperty('guidesLink');
+      expect(home.settings).not.toHaveProperty('link');
+    }
     expect(getMessages('en').contributionBoard.translationTitle).toBe('Needs translation');
     expect(getMessages('en').translationUnavailable.title).toContain('not available');
   });

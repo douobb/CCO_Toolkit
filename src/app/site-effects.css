@@ -33,6 +33,13 @@
   animation-delay: var(--site-title-glow-delay);
 }
 
+h1.site-title-glow,
+h1[data-site-article-heading],
+h2[data-site-article-heading],
+h3[data-site-article-heading] {
+  font-weight: 700;
+}
+
 .site-title-glow--home {
   --site-title-glow-core-opacity: 0.5625;
   --site-title-glow-main-opacity: 0.495;
@@ -113,17 +120,13 @@
   }
 }
 
+.site-home-section-heading,
+.site-tool-section-heading,
 [data-site-article-heading] {
   color: #e3d449;
   text-shadow:
     0 0 3px rgb(227 212 73 / 0.35),
     0 0 10px rgb(227 212 73 / 0.18);
-}
-
-.site-home-section-heading,
-.site-tool-section-heading {
-  color: #e3d449;
-  text-shadow: 0 0 2px rgb(227 212 73 / 0.16);
 }
 
 @media (forced-colors: active) {

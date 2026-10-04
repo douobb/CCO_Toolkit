@@ -31,8 +31,12 @@ const homepageShareCopy = {
   },
 } satisfies Record<Locale, { title: string; description: string; imageAlt: string; locale: string }>;
 
+export function getHomepageShareCopy(locale: Locale) {
+  return homepageShareCopy[locale];
+}
+
 export function getHomepageShareMetadata(locale: Locale, basePath?: string): Metadata {
-  const copy = homepageShareCopy[locale];
+  const copy = getHomepageShareCopy(locale);
   const imageUrl = withBasePath(siteOgCover.path, basePath);
 
   return {

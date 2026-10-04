@@ -53,25 +53,19 @@ import {
 } from './shared-user-inputs-form';
 
 export interface SharedUserInputsManagerLabels {
-  browserOnlyTitle: string;
-  browserOnlyDescription: string;
   progressionTitle: string;
-  progressionDescription: string;
   rangeHint: string;
   nonNegativeRange: string;
   priceRange: string;
   positiveRange: string;
   levelUnit: string;
   economyTitle: string;
-  economyDescription: string;
   marketPricesTitle: string;
-  marketPricesDescription: string;
   marketPriceDisplayCurrency: string;
   restorePrices: string;
   exchangeRatesTitle: string;
   cacheRatesTitle: string;
   equipmentTitle: string;
-  equipmentDescription: string;
   bargainPercent: string;
   maxHealth: string;
   armor: string;
@@ -230,18 +224,15 @@ function InputWithUnit({
 
 function Section({
   title,
-  description,
   children,
 }: {
   title: string;
-  description: string;
   children: ReactNode;
 }) {
   return (
     <Card>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
-        <CardDescription className="mt-2 leading-6">{description}</CardDescription>
       </CardHeader>
       <CardContent>{children}</CardContent>
     </Card>
@@ -301,16 +292,6 @@ export function SharedUserInputsManager({
 
   return (
     <div className="space-y-6" data-testid="shared-user-inputs-manager">
-      <div
-        className="rounded-[var(--cco-card-radius)] border border-border bg-muted/40 p-5"
-        role="note"
-      >
-        <h2 className="font-semibold text-foreground">{labels.browserOnlyTitle}</h2>
-        <p className="mt-2 text-sm leading-6 text-muted-foreground">
-          {labels.browserOnlyDescription}
-        </p>
-      </div>
-
       {Object.keys(errors).length > 0 ? (
         <p
           role="alert"
@@ -320,7 +301,7 @@ export function SharedUserInputsManager({
         </p>
       ) : null}
 
-      <Section title={labels.progressionTitle} description={labels.progressionDescription}>
+      <Section title={labels.progressionTitle}>
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {draft.levels.map((level, index) => {
             const definition = progressionLevelCatalog.find((item) => item.id === level.id);
@@ -373,7 +354,7 @@ export function SharedUserInputsManager({
         </div>
       </Section>
 
-      <Section title={labels.equipmentTitle} description={labels.equipmentDescription}>
+      <Section title={labels.equipmentTitle}>
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           <Field
             id="shared-equipment-bargain-percent"
@@ -563,7 +544,7 @@ export function SharedUserInputsManager({
         </div>
       </Section>
 
-      <Section title={labels.economyTitle} description={labels.economyDescription}>
+      <Section title={labels.economyTitle}>
         <div className="space-y-8">
           <div className="space-y-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -571,9 +552,6 @@ export function SharedUserInputsManager({
                 <h3 className="text-base font-semibold text-foreground">
                   {labels.marketPricesTitle}
                 </h3>
-                <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                  {labels.marketPricesDescription}
-                </p>
               </div>
               <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
                 <div

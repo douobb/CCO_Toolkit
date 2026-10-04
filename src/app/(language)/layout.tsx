@@ -1,23 +1,41 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import { Provider } from '@/components/provider';
-import { defaultLocale, getHtmlLanguage } from '@/lib/i18n';
+import { defaultLocale, toLocalePath } from '@/lib/i18n';
+import { withBasePath } from '@/lib/site-paths';
+import { getHomepageShareCopy, getHomepageShareMetadata } from '@/lib/site-brand';
+import {
+  SITE_TITLE_PHASE_BOOTSTRAP_SCRIPT,
+  SITE_TITLE_PHASE_STYLE_ID,
+} from '@/lib/site-title-phase';
 import '@/app/global.css';
+
+const homepageShareCopy = getHomepageShareCopy(defaultLocale);
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'),
-  title: 'CCO Toolkit',
-  description: '選擇 CCO Toolkit 的顯示語言。Choose your CCO Toolkit language.',
+  title: homepageShareCopy.title,
+  description: homepageShareCopy.description,
+  ...getHomepageShareMetadata(defaultLocale),
+  alternates: {
+    canonical: withBasePath(toLocalePath(defaultLocale)),
+  },
 };
 
 export default function LanguageRootLayout({ children }: { children: ReactNode }) {
   return (
     <html
-      lang={getHtmlLanguage(defaultLocale)}
+      lang="zh-Hant"
       className="dark"
       style={{ colorScheme: 'dark' }}
     >
-      <body className="min-h-screen">
+      <head>
+        <style id={SITE_TITLE_PHASE_STYLE_ID}></style>
+        <script
+          dangerouslySetInnerHTML={{ __html: SITE_TITLE_PHASE_BOOTSTRAP_SCRIPT }}
+        />
+      </head>
+      <body className="flex min-h-screen flex-col">
         <Provider locale={defaultLocale}>{children}</Provider>
       </body>
     </html>

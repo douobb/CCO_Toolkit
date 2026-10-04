@@ -8,15 +8,12 @@
     "primary": {
       "toolsTitle": "Tools",
       "toolsDescription": "Calculate earnings and plan upgrades.",
-      "toolsLink": "View all tools",
       "guidesTitle": "Guides",
-      "guidesDescription": "Game guides for beginners and advanced players.",
-      "guidesLink": "Browse guides"
+      "guidesDescription": "Game guides for beginners and advanced players."
     },
     "settings": {
       "title": "Player & calculation settings",
-      "description": "Manage player data in one place.",
-      "link": "Open player settings"
+      "description": "Manage player data in one place."
     },
     "contribution": {
       "title": "Contribute",
@@ -61,26 +58,20 @@
   "settingsPage": {
     "eyebrow": "CCO Toolkit",
     "title": "Player & calculation settings",
-    "description": "Manage inputs that multiple tools can reuse. Prices may use decimals; all other values are non-negative integers. Tools can fill them in as a batch, while price changes write back to shared settings.",
-    "browserOnlyTitle": "Stored only in this browser",
-    "browserOnlyDescription": "This data is not sent to a server. Valid changes are stored in this browser and synchronized with other tabs on the same site.",
+    "description": "Manage shared tool inputs.",
     "progressionTitle": "Player & skills",
-    "progressionDescription": "Set player and skill levels that multiple tools can reuse. Skill levels cannot exceed the player level.",
     "rangeHint": "${min}–${max}",
     "nonNegativeRange": "0 or more",
     "priceRange": "0 or more",
     "positiveRange": "greater than 0",
     "levelUnit": "Lv.",
     "economyTitle": "Prices & conversions",
-    "economyDescription": "Known item prices and conversion bases come from the catalog; you only need to edit values, not item IDs.",
     "marketPricesTitle": "Market prices",
-    "marketPricesDescription": "Values are stored with each item's currency and unit; catalog defaults can be restored at any time.",
     "marketPriceDisplayCurrency": "Market price display currency",
     "restorePrices": "Restore default prices",
     "exchangeRatesTitle": "Currency conversion",
     "cacheRatesTitle": "Cache conversion",
     "equipmentTitle": "Equipment & combat",
-    "equipmentDescription": "Store player values shared by tools such as Black Market and Dungeon. Destructive weapon damage defaults to 1 and must be greater than 0; critical damage defaults to 20% and is limited to 20–220%. Each tool derives its actual damage when needed.",
     "bargainPercent": "Bargain",
     "maxHealth": "Maximum health",
     "armor": "Shield / armor",
@@ -98,7 +89,6 @@
     "invalidValue": "This value does not match the shared-data rules.",
     "dataManagement": {
       "title": "Player data import and export",
-      "description": "Back up progression, combat attributes, inventory quantities, and loot-box history as a versioned JSON file, or preview differences before importing. Everything is processed only in this browser.",
       "exportTitle": "Export player data",
       "exportDescription": "Download an extensible, versioned backup of player-related data.",
       "exportButton": "Export player data",
@@ -541,7 +531,7 @@
       "trendTitle": "Earnings by level",
       "trendDescription": "Each level is applied to scavenging, molecular printing, and mining together; other inputs and market prices use the current settings.",
       "trendGroup": "Earnings view",
-      "trendGroupHint": "Switch between variable and fixed earnings; scroll horizontally on narrow screens.",
+      "trendGroupHint": "Switch between variable and fixed earnings; after zooming in, use the horizontal position slider to move across levels.",
       "trendGroupVariable": "Variable earnings",
       "trendGroupFixed": "Fixed earnings",
       "trendLegend": "Variable earnings series legend",

@@ -74,6 +74,26 @@ function assertExcludes(value, unexpected, description) {
   }
 }
 
+function assertMetadata(html, key, expected) {
+  const tags = html.match(/<meta\b[^>]*>/gi) ?? [];
+  const found = tags.some((tag) => {
+    const name = tag.match(/\b(?:name|property)="([^"]+)"/i)?.[1];
+    const content = tag.match(/\bcontent="([^"]*)"/i)?.[1];
+    return name === key && content === expected;
+  });
+  if (!found) throw new Error(`根網址分享標籤缺少或不正確：${key}=${expected}`);
+}
+
+function assertTitlePhaseBootstrap(html, description) {
+  const head = html.match(/<head\b[^>]*>([\s\S]*?)<\/head>/i)?.[1] ?? '';
+  assertIncludes(head, 'id="site-title-phase-bootstrap"', `${description} 霓虹起點樣式`);
+  const script = (head.match(/<script\b[^>]*>[\s\S]*?<\/script>/gi) ?? [])
+    .find((tag) => tag.includes("document.getElementById('site-title-phase-bootstrap')"));
+  if (!script) throw new Error(`${description} 缺少首屏同步霓虹初始化腳本`);
+  assertIncludes(script, 'insertRule', `${description} CSSOM 初始化`);
+  assertExcludes(script, '__next_s', `${description} 初始化不得依賴 Next.js 執行佇列`);
+}
+
 function assertAlternate(html, language, href, description) {
   const alternateLinks = html.match(/<link[^>]+rel="alternate"[^>]*>/g) ?? [];
   const expectedPath = href.replace(/\/$/, '');
@@ -286,9 +306,34 @@ for (const relativePath of [
   );
 }
 
+const rootPage = await readOutput('index.html');
+const siteOrigin = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+assertMetadata(rootPage, 'og:title', 'CCO Toolkit｜CyberCode Online 工具與教學');
+assertMetadata(rootPage, 'og:description', 'CyberCode Online 的計算工具與遊戲教學。');
+assertMetadata(rootPage, 'og:image', new URL(publicPath('/images/brand/og-cover.jpg'), siteOrigin).href);
+assertMetadata(rootPage, 'og:image:width', '1200');
+assertMetadata(rootPage, 'og:image:height', '630');
+assertMetadata(rootPage, 'og:image:alt', '賽博城市');
+assertMetadata(rootPage, 'twitter:card', 'summary_large_image');
+assertIncludes(rootPage, `href="${publicPath('/zh-tw/tools/')}"`, '根網址直接顯示繁中首頁工具入口');
+assertIncludes(rootPage, `<link rel="canonical" href="${new URL(publicPath('/zh-tw/'), siteOrigin).href}"`, '根首頁 canonical 指向繁中首頁');
+assertExcludes(rootPage, '正在前往繁體中文首頁', '根網址不再顯示跳轉畫面');
+assertIncludes(rootPage, 'id="nd-nav"', '根首頁完整導覽列');
+assertIncludes(rootPage, 'id="main-content"', '根首頁主要內容入口');
+const equipmentPage = await readOutput('zh-tw/guides/cache-and-equipment/index.html');
+assertIncludes(equipmentPage, 'data-markdown-table=""', '教學 Markdown 表格可讀欄寬標記');
+
 const toolPage = await readOutput('zh-tw/tools/index.html');
 const simplifiedToolPage = await readOutput('zh-cn/tools/index.html');
 const englishToolPage = await readOutput('en/tools/index.html');
+for (const [page, description] of [
+  [rootPage, '根入口'],
+  [toolPage, '繁中工具頁'],
+  [simplifiedToolPage, '簡中工具頁'],
+  [englishToolPage, '英文工具頁'],
+]) {
+  assertTitlePhaseBootstrap(page, description);
+}
 const settingsPage = await readOutput('zh-tw/settings/index.html');
 const simplifiedSettingsPage = await readOutput('zh-cn/settings/index.html');
 const englishSettingsPage = await readOutput('en/settings/index.html');
@@ -650,7 +695,18 @@ assertIncludes(toolPage, `${publicPath('/_next/')}`, 'Next 靜態資產路徑');
 assertIncludes(toolPage, `${publicPath('/zh-tw/tools/')}`, 'Navigation 連結');
 assertIncludes(settingsPage, `${publicPath('/zh-tw/settings')}`, '玩家設定 Navigation 連結');
 assertIncludes(simplifiedSettingsPage, `${publicPath('/zh-cn/settings')}`, '簡中玩家設定 Navigation 連結');
-assertIncludes(settingsPage, '只保存在目前瀏覽器', '共用設定瀏覽器儲存提示');
+for (const [page, description, removedNote] of [
+  [settingsPage, '管理工具共用輸入。', '只保存在目前瀏覽器'],
+  [simplifiedSettingsPage, '管理工具共用输入。', '只保存在当前浏览器'],
+  [englishSettingsPage, 'Manage shared tool inputs.', 'Stored only in this browser'],
+]) {
+  assertIncludes(page, description, '玩家設定精簡描述');
+  assertExcludes(page, removedNote, '玩家設定已移除的瀏覽器儲存提示');
+}
+for (const page of [toolPage, simplifiedToolPage, englishToolPage]) {
+  assertIncludes(page, 'min-w-[70rem]', '工具輸入位置表格最小寬度');
+  assertIncludes(page, 'overflow-x-auto', '工具輸入位置表格水平捲動');
+}
 assertIncludes(toolPage, '僅儲存在目前瀏覽器', '工具總覽隱私說明');
 assertIncludes(toolPage, '不會送到伺服器', '工具總覽隱私說明');
 assertIncludes(englishToolPage, 'stored only in the current browser', '英文工具總覽隱私說明');

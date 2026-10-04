@@ -31,7 +31,6 @@ import {
 
 const labels: PlayerDataManagerLabels = {
   title: 'Player data manager',
-  description: 'Keep player data in this browser.',
   exportTitle: 'Export',
   exportDescription: 'Download a browser-only backup.',
   exportButton: 'Export player data',

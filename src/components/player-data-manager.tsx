@@ -15,7 +15,6 @@ import {
   Button,
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from '@/components/ui';
@@ -49,7 +48,6 @@ import { cn } from '@/lib/cn';
  */
 export interface PlayerDataManagerLabels {
   title: string;
-  description: string;
   exportTitle: string;
   exportDescription: string;
   exportButton: string;
@@ -705,7 +703,6 @@ export function PlayerDataManager({
       <Card>
         <CardHeader>
           <CardTitle id={headingId}>{labels.title}</CardTitle>
-          <CardDescription className="mt-2 leading-6">{labels.description}</CardDescription>
         </CardHeader>
 
         <CardContent className="space-y-8">

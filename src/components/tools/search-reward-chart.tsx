@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 
 import {
@@ -16,6 +16,7 @@ import {
   getChartTickTextAnchor,
   getResponsiveChartDimensions,
 } from '@/lib/chart-layout';
+import { getChartViewportTicks } from '@/lib/chart-viewport';
 import { defaultSearchRewards } from '@/lib/search-reward';
 import {
   deriveSearchRewardChartData,
@@ -30,6 +31,7 @@ import {
   useSearchRewardTool,
   type SearchRewardToolLabels,
 } from './search-reward-calculator';
+import { ChartViewportControls, useChartViewport } from './chart-viewport';
 
 export function getSearchRewardChartDimensions(containerWidth: number) {
   return getResponsiveChartDimensions(containerWidth, {
@@ -86,11 +88,9 @@ function getSeries(
 }
 
 function getAxisTicks(min: number, max: number, divisions = 4): readonly number[] {
-  if (min === max) return [min];
-
-  return Array.from({ length: divisions + 1 }, (_, index) => index / divisions)
-    .map((ratio) => Math.round(min + (max - min) * ratio))
-    .filter((value, index, values) => values.indexOf(value) === index);
+  return Array.from({ length: divisions + 1 }, (_, index) =>
+    min + (max - min) * index / divisions,
+  );
 }
 
 function getLinePath(
@@ -138,6 +138,21 @@ function getNearestPointIndex(
     },
     0,
   );
+}
+
+function isClientPointInChartPlot(
+  clientX: number,
+  clientY: number,
+  svg: SVGSVGElement,
+  dimensions: ReturnType<typeof getSearchRewardChartDimensions>,
+) {
+  const bounds = svg.getBoundingClientRect();
+  const x = (clientX - bounds.left) / Math.max(1, bounds.width) * dimensions.width;
+  const y = (clientY - bounds.top) / Math.max(1, bounds.height) * dimensions.height;
+  return x >= dimensions.left
+    && x <= dimensions.width - dimensions.right
+    && y >= dimensions.top
+    && y <= dimensions.height - dimensions.bottom;
 }
 
 function getPointAccessibleLabel(
@@ -212,6 +227,7 @@ function SearchRewardChartSvg({
   activePointIndex,
   pinnedPointIndex,
   labels,
+  locale,
   formatNumber,
   onHoverPoint,
   onFocusPoint,
@@ -224,6 +240,7 @@ function SearchRewardChartSvg({
   activePointIndex: number | null;
   pinnedPointIndex: number | null;
   labels: SearchRewardToolLabels;
+  locale: Locale;
   formatNumber: NumberFormatter;
   onHoverPoint: (index: number | null) => void;
   onFocusPoint: (index: number | null) => void;
@@ -233,6 +250,7 @@ function SearchRewardChartSvg({
   const series = getSeries(metric, labels);
   const yAxisLabel = metric === 'value' ? labels.chartAxisValue : labels.chartAxisQuantity;
   const chartContainerRef = useRef<HTMLDivElement>(null);
+  const chartClipPathId = `search-reward-chart-plot-${useId()}`;
   const pointRefs = useRef<Array<SVGCircleElement | null>>([]);
   const [containerWidth, setContainerWidth] = useState(chartDefaultWidth);
   const chartDimensions = getSearchRewardChartDimensions(containerWidth);
@@ -240,17 +258,21 @@ function SearchRewardChartSvg({
   const chartPlotHeight = chartDimensions.height - chartDimensions.top - chartDimensions.bottom;
   const minLevel = data.minLevel;
   const maxLevel = data.maxLevel;
-  const levelRange = Math.max(1, maxLevel - minLevel);
+  const chartDomain = { min: minLevel, max: maxLevel };
+  const viewportControls = useChartViewport(chartDomain);
+  const visibleMinLevel = viewportControls.viewport.min;
+  const visibleMaxLevel = viewportControls.viewport.max;
+  const levelRange = Math.max(1, visibleMaxLevel - visibleMinLevel);
   const maxValue = Math.max(
     0,
     ...series.flatMap((item) => data.points.map((point) => item.getValue(point))),
   );
   const valueRange = maxValue > 0 ? maxValue : 1;
   const xForLevel = (level: number) =>
-    chartDimensions.left + ((level - minLevel) / levelRange) * chartPlotWidth;
+    chartDimensions.left + ((level - visibleMinLevel) / levelRange) * chartPlotWidth;
   const yForValue = (value: number) =>
     chartDimensions.top + chartPlotHeight - (value / valueRange) * chartPlotHeight;
-  const levelTicks = getAxisTicks(minLevel, maxLevel);
+  const levelTicks = getChartViewportTicks(viewportControls.viewport).map(Math.round);
   const valueTicks = getAxisTicks(0, valueRange);
   const activePoint = activePointIndex === null ? undefined : data.points[activePointIndex];
   const tabEntryIndex = activePointIndex
@@ -260,8 +282,10 @@ function SearchRewardChartSvg({
     ? Math.max(...series.map((item) => item.getValue(activePoint)))
     : null;
   const currentX = currentLevel === null
+    || currentLevel < visibleMinLevel
+    || currentLevel > visibleMaxLevel
     ? null
-    : xForLevel(Math.max(minLevel, Math.min(maxLevel, currentLevel)));
+    : xForLevel(currentLevel);
   const currentLevelLabelUsesStartAnchor = currentX !== null
     && currentX <= chartDimensions.left + 96;
   const currentLevelLabelX = currentX === null
@@ -326,20 +350,57 @@ function SearchRewardChartSvg({
   return (
     <div
       ref={chartContainerRef}
-      className="w-full min-w-[40rem]"
+      className="w-full min-w-0"
       data-chart-metric={metric}
     >
+      <ChartViewportControls
+        locale={locale}
+        canZoomIn={viewportControls.canZoomIn}
+        canZoomOut={viewportControls.canZoomOut}
+        isFullRange={viewportControls.isFullRange}
+        viewport={viewportControls.viewport}
+        sliderValue={viewportControls.sliderValue}
+        onZoomIn={viewportControls.zoomIn}
+        onZoomOut={viewportControls.zoomOut}
+        onReset={viewportControls.reset}
+        onSliderChange={viewportControls.onSliderChange}
+      />
       <svg
         role="group"
         aria-labelledby="search-reward-chart-svg-title search-reward-chart-y-axis-label"
         aria-describedby="search-reward-chart-interaction-hint"
         viewBox={`0 0 ${chartDimensions.width} ${chartDimensions.height}`}
         data-chart-width={chartDimensions.width}
+        data-chart-x-min={visibleMinLevel}
+        data-chart-x-max={visibleMaxLevel}
+        data-chart-y-min={0}
+        data-chart-y-max={valueRange}
         data-chart-tick-count={levelTicks.length}
         data-chart-y-tick-count={valueTicks.length}
         className="block h-auto w-full"
+        style={{ touchAction: 'pan-y pinch-zoom' }}
+        onClick={(event) => {
+          if (event.detail === 0 || !isClientPointInChartPlot(
+            event.clientX,
+            event.clientY,
+            event.currentTarget,
+            chartDimensions,
+          )) return;
+          const index = getNearestPointFromClientX(event.clientX, event.currentTarget);
+          if (index !== null) onSelectPoint(index);
+        }}
       >
         <title id="search-reward-chart-svg-title">{labels.chartTitle}</title>
+        <defs>
+          <clipPath id={chartClipPathId}>
+            <rect
+              x={chartDimensions.left}
+              y={chartDimensions.top}
+              width={chartPlotWidth}
+              height={chartPlotHeight}
+            />
+          </clipPath>
+        </defs>
         <text
           id="search-reward-chart-y-axis-label"
           data-chart-axis="y"
@@ -353,10 +414,10 @@ function SearchRewardChartSvg({
           {yAxisLabel}
         </text>
 
-        {valueTicks.map((value) => {
+        {valueTicks.map((value, index) => {
           const y = yForValue(value);
           return (
-            <g key={`value-tick-${value}`}>
+            <g key={`value-tick-${index}`}>
               <line
                 x1={chartDimensions.left}
                 x2={chartDimensions.width - chartDimensions.right}
@@ -387,6 +448,7 @@ function SearchRewardChartSvg({
             strokeLinecap="round"
             strokeLinejoin="round"
             strokeDasharray={item.dashArray}
+            clipPath={`url(#${chartClipPathId})`}
             vectorEffect="non-scaling-stroke"
             d={getLinePath(data.points, item.getValue, xForLevel, yForValue)}
             aria-hidden="true"
@@ -403,6 +465,7 @@ function SearchRewardChartSvg({
               fill="var(--color-fd-background)"
               stroke="var(--cco-color-warning)"
               strokeWidth="2"
+              clipPath={`url(#${chartClipPathId})`}
               vectorEffect="non-scaling-stroke"
               data-ladder-point="true"
               aria-hidden="true"
@@ -411,7 +474,11 @@ function SearchRewardChartSvg({
         )) : null}
 
         {activePoint && selectedSeriesValue !== null ? (
-          <g data-selected-point="true" aria-hidden="true">
+          <g
+            data-selected-point="true"
+            aria-hidden="true"
+            clipPath={`url(#${chartClipPathId})`}
+          >
             <line
               x1={xForLevel(activePoint.level)}
               x2={xForLevel(activePoint.level)}
@@ -448,7 +515,7 @@ function SearchRewardChartSvg({
         ) : null}
 
         {currentX !== null ? (
-          <g aria-hidden="true">
+          <g aria-hidden="true" clipPath={`url(#${chartClipPathId})`}>
             <line
               data-current-level-line="true"
               x1={currentX}
@@ -486,7 +553,7 @@ function SearchRewardChartSvg({
         {levelTicks.map((level, index) => {
           const x = xForLevel(level);
           return (
-            <g key={`level-tick-${level}`}>
+            <g key={`level-tick-${index}`}>
               <line
                 x1={x}
                 x2={x}
@@ -556,13 +623,19 @@ function SearchRewardChartSvg({
             strokeWidth="2"
             tabIndex={index === tabEntryIndex ? 0 : -1}
             role="button"
+            clipPath={`url(#${chartClipPathId})`}
             aria-label={getPointAccessibleLabel(point, labels, formatNumber)}
             aria-pressed={pinnedPointIndex === index}
             onMouseEnter={() => onHoverPoint(index)}
             onMouseLeave={() => onHoverPoint(null)}
-            onFocus={() => onFocusPoint(index)}
+            onFocus={() => {
+              viewportControls.ensureLevelVisible(point.level);
+              onFocusPoint(index);
+            }}
             onBlur={() => onFocusPoint(null)}
-            onClick={() => onSelectPoint(index)}
+            onClick={(event) => {
+              if (event.detail === 0) onSelectPoint(index);
+            }}
             onKeyDown={(event) => handlePointKeyDown(event, index)}
           />
         ))}
@@ -709,16 +782,16 @@ export function SearchRewardChart({
 
               <div className="mt-6 min-w-0 max-w-full">
                 <div
-                  className="w-full min-w-0 max-w-full overflow-x-auto"
-                  data-chart-scroll-container="true"
+                  className="w-full min-w-0 max-w-full"
+                  data-chart-region="true"
                   role="region"
                   aria-label={labels.chartTitle}
-                  tabIndex={0}
                 >
                   <SearchRewardChartSvg
                     data={chartData}
                     metric={metric}
                     currentLevel={inputs?.playerLevel ?? null}
+                    locale={locale}
                     activePointIndex={activePointIndex}
                     pinnedPointIndex={pinnedPointIndex}
                     labels={labels}

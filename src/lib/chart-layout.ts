@@ -1,6 +1,5 @@
 import type { NumberFormatter } from './number-formatting';
 
-export const chartMinimumWidth = 640;
 export const chartDefaultWidth = 960;
 export const chartCompactBreakpoint = 640;
 export const chartYAxisTickLabelReserve = 36;
@@ -15,19 +14,19 @@ export interface ResponsiveChartVerticalInsets {
 }
 
 /**
- * 共用寬幅圖表尺寸：保留既有高度與垂直 inset，只縮減左右 gutter。
+ * 依容器寬度配置圖表畫布，讓座標文字維持原尺寸且折線圖可完整放入窄版面。
  */
 export function getResponsiveChartDimensions(
   containerWidth: number,
   insets: ResponsiveChartVerticalInsets,
 ) {
   const measuredWidth = Math.round(containerWidth || chartDefaultWidth);
-  const width = Math.max(chartMinimumWidth, measuredWidth);
+  const width = Math.max(1, measuredWidth);
   const compact = measuredWidth < chartCompactBreakpoint;
 
   return {
     width,
-    height: Math.min(400, Math.max(180, Math.round(width / 2))),
+    height: Math.min(400, Math.max(160, Math.round(width / 2))),
     left: chartYAxisTickLabelReserve + chartYAxisTickGap + (compact ? 2 : 6),
     right: compact ? 8 : 12,
     top: compact ? insets.compactTop : insets.wideTop,

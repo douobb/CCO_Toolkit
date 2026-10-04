@@ -19,11 +19,38 @@ This area brings together the interactive tools. The tool itself appears near th
 
 Tool inputs are divided into two groups based on how often they are adjusted:
 
-| Input type | Purpose | Wide desktop layout | Mobile or narrow layout |
-| --- | --- | --- | --- |
-| Primary inputs | Values adjusted frequently and used directly in the current calculation | In the **Primary inputs** section of the main tool area | In the same **Primary inputs** section of the main tool area |
-| Low-frequency inputs | Prices, buffs, and calculation settings that change less often | In the **Settings** tab of the right sidebar | Select the settings icon in top bar to open the bottom panel |
-| Player & calculation settings | Manage player, equipment, and calculation data that multiple tools can reuse | At the bottom of the left sidebar, above the language selector | Click the player and gear icons in the top CCO Toolkit bar; this entry is separate from an individual tool's gear settings icon |
+<DataTable
+  ariaLabel="Tool input locations"
+  rowHeader
+  stickyFirstColumn
+  tableClassName="min-w-[70rem] table-fixed"
+  columns={[
+    { label: 'Input type', width: '8rem' },
+    { label: 'Purpose', width: '16rem' },
+    { label: 'Wide desktop layout', width: '22rem' },
+    { label: 'Mobile or narrow layout', width: '22rem' },
+  ]}
+  rows={[
+    [
+      'Primary inputs',
+      'Values adjusted frequently and used directly in the current calculation',
+      <>In the <strong>Primary inputs</strong> section of the main tool area</>,
+      <>In the same <strong>Primary inputs</strong> section of the main tool area</>,
+    ],
+    [
+      'Low-frequency inputs',
+      'Prices, buffs, and calculation settings that change less often',
+      <>In the <strong>Settings</strong> tab of the right sidebar</>,
+      'Select the settings icon in top bar to open the bottom panel',
+    ],
+    [
+      'Player & calculation settings',
+      'Manage player, equipment, and calculation data that multiple tools can reuse',
+      'At the bottom of the left sidebar, above the language selector',
+      "Click the player and gear icons in the top CCO Toolkit bar; this entry is separate from an individual tool's gear settings icon",
+    ],
+  ]}
+/>
 
 The layout changes according to the main content area's actual available width, so a narrow desktop window may also use the mobile settings entry point.
 

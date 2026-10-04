@@ -5,6 +5,10 @@ import { Provider } from '@/components/provider';
 import { getHtmlLanguage, isLocale, locales, toLocalePath } from '@/lib/i18n';
 import { withBasePath } from '@/lib/site-paths';
 import { getMessages } from '@/lib/translations';
+import {
+  SITE_TITLE_PHASE_BOOTSTRAP_SCRIPT,
+  SITE_TITLE_PHASE_STYLE_ID,
+} from '@/lib/site-title-phase';
 import '@/app/global.css';
 
 type LocaleLayoutProps = {
@@ -51,6 +55,12 @@ export default async function LocaleRootLayout({ children, params }: LocaleLayou
       className="dark"
       style={{ colorScheme: 'dark' }}
     >
+      <head>
+        <style id={SITE_TITLE_PHASE_STYLE_ID}></style>
+        <script
+          dangerouslySetInnerHTML={{ __html: SITE_TITLE_PHASE_BOOTSTRAP_SCRIPT }}
+        />
+      </head>
       <body className="flex min-h-screen flex-col">
         <Provider locale={lang}>{children}</Provider>
       </body>

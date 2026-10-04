@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import HomePage from './page';
 import { siteHomeTitleClassName } from '@/components/site-page-title';
+import { getMessages } from '@/lib/translations';
 
 const siteEffectsStylesPath = new URL('../../../app/site-effects.css', import.meta.url);
 
@@ -43,32 +44,82 @@ vi.mock('@/lib/contribution-board-source', () => ({
 }));
 
 describe('home page information architecture', () => {
-  it('renders the primary, contribution, and secondary links without homepage-only helper promotion', async () => {
+  it('makes the tools, guides, and settings cards single keyboard-focusable links', async () => {
     const element = await HomePage({ params: Promise.resolve({ lang: 'zh-tw' }) });
     const markup = renderToStaticMarkup(element);
 
-    expect(markup).toContain('href="/zh-tw/tools"');
-    expect(markup).toContain('href="/zh-tw/guides"');
-    expect(markup).toContain('查看所有工具');
-    expect(markup).toContain('瀏覽教學');
+    const primaryCards = [
+      ['/zh-tw/tools', '計算收益，規劃升級。'],
+      ['/zh-tw/guides', '遊戲入門與進階教學。'],
+      ['/zh-tw/settings', '集中管理玩家資料。'],
+    ] as const;
+
+    for (const [href, description] of primaryCards) {
+      const anchor = markup.match(new RegExp(`<a(?=[^>]*href="${href}")[^>]*>[\\s\\S]*?<\\/a>`))?.[0];
+
+      expect(anchor).toBeDefined();
+      expect(anchor?.match(/<a\b/g)).toHaveLength(1);
+      expect(anchor).toContain(description);
+      expect(anchor).toContain('focus-visible:ring-2');
+      expect(anchor).not.toMatch(/<svg[^>]*size-4/);
+      if (href === '/zh-tw/settings') {
+        expect(anchor).not.toMatch(/mt-3 size-4/);
+      } else {
+        expect(anchor).not.toContain('mt-5');
+      }
+    }
+    expect(markup).not.toContain('查看所有工具');
+    expect(markup).not.toContain('瀏覽教學');
+    expect(markup).not.toContain('開啟玩家設定');
     expect(markup).not.toContain('href="/zh-tw/guides/new-player"');
     expect(markup).not.toContain('href="/zh-tw/tools/helper-overview"');
     expect(markup).not.toContain('CCO Helper');
     expect(markup).not.toContain('核心入口');
     expect(markup).not.toContain('home-primary-heading');
-    expect(markup.match(/site-home-section-heading/g)).toHaveLength(3);
+    expect(markup.match(/site-home-section-heading/g)).toHaveLength(4);
     expect(markup.match(/<h2 id="home-contribution-heading" class="([^"]+)"/)?.[1])
       .toContain('site-home-section-heading');
     expect(markup.match(/<h2 id="home-secondary-heading" class="([^"]+)"/)?.[1])
-      .not.toContain('site-home-section-heading');
+      .toContain('site-home-section-heading');
     expect(markup).toContain('href="/zh-tw/settings"');
     expect(markup).toContain('href="/zh-tw/about/contribution-board"');
     expect(markup).toContain('href="/zh-tw/about/contributing"');
+    const contributionLink = markup.match(
+      /<a(?=[^>]*href="\/zh-tw\/about\/contribution-board")[^>]*>[\s\S]*?<\/a>/,
+    )?.[0];
+    expect(contributionLink).toMatch(/<svg[^>]*size-4/);
     expect(markup).toContain('href="/zh-tw/blog"');
     expect(markup).toContain('href="/zh-tw/recommendations"');
     expect(markup).toContain('href="/zh-tw/about"');
     expect(markup).toContain('Chinese target contribution');
     expect(markup).not.toContain('English target contribution');
+  });
+
+  it.each(['zh-tw', 'zh-cn', 'en'] as const)(
+    'omits the secondary eyebrow and keeps the section heading in %s',
+    async (locale) => {
+      const element = await HomePage({ params: Promise.resolve({ lang: locale }) });
+      const markup = renderToStaticMarkup(element);
+      const secondary = getMessages(locale).home.secondary;
+
+      expect(markup).not.toContain(secondary.eyebrow);
+      expect(markup).toContain(secondary.title);
+      expect(markup).toContain(secondary.blogTitle);
+      expect(markup).toMatch(/<h2 id="home-secondary-heading" class="[^"]*site-home-section-heading/);
+    },
+  );
+
+  it('slightly tightens homepage section spacing while preserving card padding', async () => {
+    const element = await HomePage({ params: Promise.resolve({ lang: 'zh-tw' }) });
+    const markup = renderToStaticMarkup(element);
+
+    expect(markup).toContain('class="mt-8 grid gap-4 sm:mt-10 md:grid-cols-2"');
+    expect(markup).toContain('group mt-6 block rounded-xl border border-fd-border bg-fd-card/70 p-4');
+    expect(markup).toContain(
+      'class="mt-12 rounded-2xl border border-fd-border bg-fd-card/60 p-6 sm:mt-16 sm:p-8"',
+    );
+    expect(markup).toContain('<section aria-labelledby="home-secondary-heading" class="mt-12 sm:mt-16">');
+    expect(markup).toContain('site-home-section-heading text-2xl font-semibold');
   });
 });
 
@@ -204,13 +255,17 @@ describe('homepage title treatment', () => {
     expect(articleHeading.color).toBe('#e3d449');
     expect(normalize(articleHeading['text-shadow']))
       .toBe('0 0 3px rgb(227 212 73 / 0.35), 0 0 10px rgb(227 212 73 / 0.18)');
-    expect(declarations('.site-home-section-heading')).toMatchObject({
-      color: '#e3d449',
-      'text-shadow': '0 0 2px rgb(227 212 73 / 0.16)',
-    });
-    expect(declarations('.site-tool-section-heading')).toMatchObject({
-      color: '#e3d449',
-      'text-shadow': '0 0 2px rgb(227 212 73 / 0.16)',
-    });
+    expect(declarations('.site-home-section-heading')).toEqual(articleHeading);
+    expect(declarations('.site-tool-section-heading')).toEqual(articleHeading);
+    const sharedHeadingRules = [...rules.values()].filter((rule) =>
+      ['[data-site-article-heading]', '.site-home-section-heading', '.site-tool-section-heading']
+        .some((selector) => rule.selectors.includes(selector)),
+    );
+    expect(sharedHeadingRules).toHaveLength(1);
+    expect(sharedHeadingRules[0].selectors).toEqual([
+      '.site-home-section-heading',
+      '.site-tool-section-heading',
+      '[data-site-article-heading]',
+    ]);
   });
 });

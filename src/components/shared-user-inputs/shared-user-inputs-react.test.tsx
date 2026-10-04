@@ -37,7 +37,7 @@ describe('Shared User Inputs React adapter', () => {
     first(); second(); store.dispose();
   });
 
-  it('renders localized fixed catalog fields, privacy notice and scoped reset guidance', () => {
+  it('renders localized fixed catalog fields without a browser-only note and keeps reset guidance', () => {
     for (const locale of ['zh-tw', 'zh-cn', 'en'] as const) {
       const hiddenRangeHints = {
         'zh-tw': ['0 以上（整數）', '0 以上（可輸入小數）', '1 以上（整數）', '20–220%（整數）'],
@@ -47,7 +47,17 @@ describe('Shared User Inputs React adapter', () => {
       const store = createSharedUserInputsStore({ storage: null });
       const labels = getMessages(locale).settingsPage;
       const markup = renderToStaticMarkup(<SharedUserInputsProvider store={store}><SharedUserInputsManager labels={labels} locale={locale} /></SharedUserInputsProvider>);
-      expect(markup).toContain(labels.browserOnlyTitle);
+      expect(markup).not.toContain('role="note"');
+      for (const key of [
+        'browserOnlyTitle',
+        'browserOnlyDescription',
+        'progressionDescription',
+        'equipmentDescription',
+        'economyDescription',
+        'marketPricesDescription',
+      ]) {
+        expect(labels).not.toHaveProperty(key);
+      }
       expect(markup).toContain(labels.progressionTitle.replaceAll('&', '&amp;'));
       expect(markup).toContain(labels.equipmentTitle.replaceAll('&', '&amp;'));
       expect(markup).toContain(labels.economyTitle.replaceAll('&', '&amp;'));

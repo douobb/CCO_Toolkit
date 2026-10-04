@@ -8,15 +8,12 @@
     "primary": {
       "toolsTitle": "工具",
       "toolsDescription": "计算收益，规划升级。",
-      "toolsLink": "查看所有工具",
       "guidesTitle": "教程",
-      "guidesDescription": "游戏入门与进阶教程。",
-      "guidesLink": "浏览教程"
+      "guidesDescription": "游戏入门与进阶教程。"
     },
     "settings": {
       "title": "玩家与计算设置",
-      "description": "集中管理玩家数据。",
-      "link": "打开玩家设置"
+      "description": "集中管理玩家数据。"
     },
     "contribution": {
       "title": "参与贡献",
@@ -61,26 +58,20 @@
   "settingsPage": {
     "eyebrow": "CCO Toolkit",
     "title": "玩家与计算设置",
-    "description": "集中管理多个工具可沿用的共用输入；除物价可输入小数外，其余数值均为非负整数。工具可一次带入，价格更改会回写共用值。",
-    "browserOnlyTitle": "只保存在当前浏览器",
-    "browserOnlyDescription": "这些数据不会送到服务器。合法更改会存储在当前浏览器，并同步到同一网站的其他标签页。",
+    "description": "管理工具共用输入。",
     "progressionTitle": "玩家与技能",
-    "progressionDescription": "设置可由多个工具沿用的玩家等级与技能等级；五项技能等级不能高于主等级。",
     "rangeHint": "${min}–${max}",
     "nonNegativeRange": "0 以上",
     "priceRange": "0 以上",
     "positiveRange": "大于 0",
     "levelUnit": "Lv.",
     "economyTitle": "物价与换算",
-    "economyDescription": "根据数据目录列出可共用的物品价格与换算基准；你只需要修改数值，不必输入物品 ID。",
     "marketPricesTitle": "市场价格",
-    "marketPricesDescription": "价格会依各物品的货币与单位保存；数据目录默认值可随时恢复。",
     "marketPriceDisplayCurrency": "市场价格显示货币",
     "restorePrices": "恢复物价默认值",
     "exchangeRatesTitle": "货币换算",
     "cacheRatesTitle": "图纸换算",
     "equipmentTitle": "装备与战斗",
-    "equipmentDescription": "集中保存黑市与地下城等工具可共用的玩家数值。破坏性武器伤害默认为 1 且必须大于 0，爆击伤害默认为 20% 且限制为 20–220%；工具会在需要时推导实际爆击伤害。",
     "bargainPercent": "讨价还价",
     "maxHealth": "最大血量",
     "armor": "护盾",
@@ -98,7 +89,6 @@
     "invalidValue": "此值不符合共用数据规则。",
     "dataManagement": {
       "title": "玩家数据导入与导出",
-      "description": "将玩家进度、战斗属性、背包物资与开箱记录备份成通用 JSON 文件，或先预览差异后导入。所有处理都只在当前浏览器进行。",
       "exportTitle": "导出玩家数据",
       "exportDescription": "下载可扩充、具版本信息的玩家数据备份。",
       "exportButton": "导出玩家数据",
@@ -541,7 +531,7 @@
       "trendTitle": "收益等级趋势",
       "trendDescription": "同一等级会同时应用于搜刮、打印与挖矿；其他输入与物价沿用当前设置。",
       "trendGroup": "收益视图",
-      "trendGroupHint": "在变动收益与固定收益之间切换；手机宽度不足时可水平滑动。",
+      "trendGroupHint": "在变动收益与固定收益之间切换；放大图表后，可用水平位置滑块移动。",
       "trendGroupVariable": "变动收益",
       "trendGroupFixed": "固定收益",
       "trendLegend": "变动收益系列图例",
