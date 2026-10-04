@@ -1,0 +1,212 @@
+{
+  "statusEffects": [
+    {
+      "id": "UwU",
+      "labels": { "zh-tw": "聊天漏洞[UwU]", "zh-cn": "聊天漏洞 [UwU]", "en": "Chat Exploit [UwU]" },
+      "maxDurationSeconds": 1200,
+      "sourceKind": "plugin-observed",
+      "verification": "confirmed"
+    },
+    {
+      "id": "afkRewardBoost",
+      "labels": { "zh-tw": "AFK獎勵提升", "zh-cn": "AFK奖励加成", "en": "AFK Reward Boost" },
+      "maxDurationSeconds": 1200,
+      "sourceKind": "plugin-observed",
+      "verification": "confirmed"
+    },
+    {
+      "id": "aiConnect",
+      "labels": { "zh-tw": "網路空間連線", "zh-cn": "网络空间连接", "en": "Cyberspace Connection" },
+      "maxDurationSeconds": 1200,
+      "sourceKind": "plugin-observed",
+      "verification": "confirmed"
+    },
+    {
+      "id": "autoCali1",
+      "labels": { "zh-tw": "校準列車 I", "zh-cn": "校准训练 I", "en": "Calibration Train I" },
+      "maxDurationSeconds": 1200,
+      "sourceKind": "plugin-observed",
+      "verification": "confirmed"
+    },
+    {
+      "id": "autoCali2",
+      "labels": { "zh-tw": "校準列車 II", "zh-cn": "校准训练 II", "en": "Calibration Train II" },
+      "maxDurationSeconds": 1200,
+      "sourceKind": "plugin-observed",
+      "verification": "confirmed"
+    },
+    {
+      "id": "btcBonus",
+      "labels": { "zh-tw": "交易漏洞利用", "zh-cn": "交易漏洞", "en": "Trading Exploit" },
+      "maxDurationSeconds": 1200,
+      "sourceKind": "plugin-observed",
+      "verification": "confirmed"
+    },
+    {
+      "id": "chatExploitProtect",
+      "labels": { "zh-tw": "聊天加密", "zh-cn": "聊天加密", "en": "Chat Encryption" },
+      "maxDurationSeconds": 1200,
+      "sourceKind": "plugin-observed",
+      "verification": "confirmed"
+    },
+    {
+      "id": "equipmentExchangeAccess",
+      "labels": { "zh-tw": "裝備交換權限", "zh-cn": "装备交换权限", "en": "Equipment Exchange Access" },
+      "maxDurationSeconds": 1200,
+      "sourceKind": "plugin-observed",
+      "verification": "confirmed"
+    },
+    {
+      "id": "expBonus",
+      "labels": { "zh-tw": "額葉皮質增強", "zh-cn": "额叶皮质增强", "en": "Frontal Cortex Enhancement" },
+      "maxDurationSeconds": 1200,
+      "sourceKind": "plugin-observed",
+      "verification": "confirmed"
+    },
+    {
+      "id": "globalParty",
+      "labels": { "zh-tw": "全球派對", "zh-cn": "全球派对", "en": "Global Party" },
+      "maxDurationSeconds": 86400,
+      "sourceKind": "plugin-observed",
+      "verification": "confirmed"
+    },
+    {
+      "id": "leet",
+      "labels": { "zh-tw": "聊天漏洞[1337]", "zh-cn": "聊天漏洞[1337]", "en": "Chat Exploit [1337]" },
+      "maxDurationSeconds": 1200,
+      "sourceKind": "plugin-observed",
+      "verification": "confirmed"
+    },
+    {
+      "id": "love",
+      "labels": { "zh-tw": "聊天漏洞[LOVE]", "zh-cn": "聊天漏洞[Love]", "en": "Chat Exploit [LOVE]" },
+      "maxDurationSeconds": 1200,
+      "sourceKind": "plugin-observed",
+      "verification": "confirmed"
+    },
+    {
+      "id": "petDraw",
+      "labels": { "zh-tw": "寵物領養", "zh-cn": "宠物领养", "en": "Pet Adoption" },
+      "maxDurationSeconds": 1200,
+      "sourceKind": "plugin-observed",
+      "verification": "confirmed"
+    },
+    {
+      "id": "petRevive",
+      "labels": { "zh-tw": "寵物復活", "zh-cn": "宠物复活", "en": "Pet Revival" },
+      "maxDurationSeconds": 1200,
+      "sourceKind": "plugin-observed",
+      "verification": "confirmed"
+    },
+    {
+      "id": "pirate",
+      "labels": { "zh-tw": "聊天漏洞[PIRATE]", "zh-cn": "聊天漏洞[PIRATE]", "en": "Chat Exploit [PIRATE]" },
+      "maxDurationSeconds": 1200,
+      "sourceKind": "plugin-observed",
+      "verification": "confirmed"
+    },
+    {
+      "id": "posh",
+      "labels": { "zh-tw": "聊天漏洞[高雅]", "zh-cn": "聊天漏洞[高雅]", "en": "Chat Exploit [Posh]" },
+      "maxDurationSeconds": 1200,
+      "sourceKind": "plugin-observed",
+      "verification": "confirmed"
+    },
+    {
+      "id": "rngInterferer",
+      "labels": { "zh-tw": "RNG干擾", "zh-cn": "RNG干扰", "en": "RNG Interference" },
+      "maxDurationSeconds": 1200,
+      "sourceKind": "plugin-observed",
+      "verification": "confirmed"
+    },
+    {
+      "id": "synapticAccelerationRare",
+      "labels": { "zh-tw": "突觸加速（稀有）", "zh-cn": "神经突触加速（罕见）", "en": "Synaptic Acceleration (Rare)" },
+      "maxDurationSeconds": 1200,
+      "sourceKind": "plugin-observed",
+      "verification": "confirmed"
+    },
+    {
+      "id": "synapticAccelerationSmall",
+      "labels": { "zh-tw": "突觸加速", "zh-cn": "神经突触加速", "en": "Synaptic Acceleration" },
+      "maxDurationSeconds": 1200,
+      "sourceKind": "plugin-observed",
+      "verification": "confirmed"
+    },
+    {
+      "id": "upgradeChance",
+      "labels": { "zh-tw": "校準精確度", "zh-cn": "校准精度", "en": "Calibration Accuracy" },
+      "maxDurationSeconds": 1200,
+      "sourceKind": "plugin-observed",
+      "verification": "confirmed"
+    },
+    {
+      "id": "upgradeChance1",
+      "labels": { "zh-tw": "校準精確度（普通）", "zh-cn": "校准精度（常见）", "en": "Calibration Accuracy (Common)" },
+      "maxDurationSeconds": 1200,
+      "sourceKind": "plugin-observed",
+      "verification": "confirmed"
+    },
+    {
+      "id": "upgradeChance2",
+      "labels": { "zh-tw": "校準精確度（稀有）", "zh-cn": "校准精度（罕见）", "en": "Calibration Accuracy (Rare)" },
+      "maxDurationSeconds": 1200,
+      "sourceKind": "plugin-observed",
+      "verification": "confirmed"
+    },
+    {
+      "id": "upgradeChance3",
+      "labels": { "zh-tw": "校準精確度（傳奇）", "zh-cn": "校准精度（传奇）", "en": "Calibration Accuracy (Legendary)" },
+      "maxDurationSeconds": 1200,
+      "sourceKind": "plugin-observed",
+      "verification": "confirmed"
+    },
+    {
+      "id": "upgradeChance4",
+      "labels": { "zh-tw": "校準精準度（史詩）", "zh-cn": "校准精度（史诗）", "en": "Calibration Accuracy (Epic)" },
+      "maxDurationSeconds": 1200,
+      "sourceKind": "plugin-observed",
+      "verification": "confirmed"
+    },
+    {
+      "id": "upgradeChance5",
+      "labels": { "zh-tw": "校準精度（威望）", "zh-cn": "校准精度（威望）", "en": "Calibration Accuracy (Prestige)" },
+      "maxDurationSeconds": 1200,
+      "sourceKind": "plugin-observed",
+      "verification": "confirmed"
+    },
+    {
+      "id": "upgradeNoBreak",
+      "labels": { "zh-tw": "校準安全奈米機器人", "zh-cn": "校准安全纳米机器人", "en": "Calibration Safety Nanobots" },
+      "maxDurationSeconds": 1200,
+      "sourceKind": "plugin-observed",
+      "verification": "confirmed"
+    }
+  ],
+  "manualInputs": [
+    {
+      "id": "btc-buff-percent",
+      "labels": { "zh-tw": "BTC 收益加成", "zh-cn": "BTC 收益加成", "en": "BTC Reward Bonus" },
+      "kind": "manual-calculation-assumption",
+      "control": "percentage",
+      "unit": "%",
+        "range": { "min": 0, "max": 100, "step": 40 },
+      "defaultValue": null,
+      "observedFallbackValue": 0,
+      "relatedEffectIds": ["btcBonus", "globalParty"],
+      "verification": "confirmed"
+    },
+    {
+      "id": "exp-buff-percent",
+      "labels": { "zh-tw": "經驗值加成", "zh-cn": "经验值加成", "en": "Experience Bonus" },
+      "kind": "manual-calculation-assumption",
+      "control": "percentage",
+      "unit": "%",
+        "range": { "min": 0, "max": 100, "step": 40 },
+      "defaultValue": null,
+      "observedFallbackValue": 0,
+      "relatedEffectIds": ["expBonus", "globalParty"],
+      "verification": "confirmed"
+    }
+  ]
+}

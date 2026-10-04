@@ -1,0 +1,20 @@
+{
+  "title": "Guides",
+  "description": "Beginner and advanced guides for CyberCode Online.",
+  "root": true,
+  "pagesIndex": "index",
+  "pages": [
+    "---Beginner---",
+    "new-player",
+    "gang",
+    "cache-and-equipment",
+    "resources",
+    "trading",
+    "faq",
+    "---Advanced---",
+    "advanced-features",
+    "dungeon-loadout",
+    "buffs-and-items",
+    "formulas"
+  ]
+}

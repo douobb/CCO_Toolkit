@@ -1,0 +1,771 @@
+import { readdir, readFile } from 'node:fs/promises';
+import path from 'node:path';
+
+function normalizeBasePath(value = '') {
+  const raw = value.trim();
+
+  if (!raw || raw === '/') return '';
+
+  const normalized = `/${raw.replace(/^\/+|\/+$/g, '')}`;
+  if (
+    !normalized ||
+    normalized === '/' ||
+    normalized.includes('//') ||
+    /[?#\s]/.test(normalized) ||
+    /^[a-z][a-z\d+.-]*:/i.test(normalized)
+  ) {
+    throw new Error(`無效的 NEXT_PUBLIC_BASE_PATH：${value}`);
+  }
+
+  return normalized;
+}
+
+const projectRoot = process.cwd();
+const outputRoot = path.join(projectRoot, 'out');
+const basePath = normalizeBasePath(process.env.NEXT_PUBLIC_BASE_PATH);
+const publicPath = (pathname) => `${basePath}${pathname}`;
+
+async function ensureFile(relativePath) {
+  try {
+    await readFile(path.join(outputRoot, relativePath));
+  } catch {
+    throw new Error(`Static Export 缺少必要檔案：out/${relativePath}`);
+  }
+}
+
+async function readOutput(relativePath) {
+  await ensureFile(relativePath);
+  return readFile(path.join(outputRoot, relativePath), 'utf8');
+}
+
+async function collectFiles(directory, predicate) {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const files = [];
+
+  for (const entry of entries) {
+    const entryPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...(await collectFiles(entryPath, predicate)));
+    } else if (entry.isFile() && predicate(entry.name)) {
+      files.push(entryPath);
+    }
+  }
+
+  return files;
+}
+
+async function collectJavaScriptFiles(directory) {
+  return collectFiles(directory, (name) => name.endsWith('.js'));
+}
+
+async function collectHtmlFiles(directory) {
+  return collectFiles(directory, (name) => name.endsWith('.html'));
+}
+
+function assertIncludes(value, expected, description) {
+  if (!value.includes(expected)) {
+    throw new Error(`${description} 缺少：${expected}`);
+  }
+}
+
+function assertExcludes(value, unexpected, description) {
+  if (value.includes(unexpected)) {
+    throw new Error(`${description} 不應包含：${unexpected}`);
+  }
+}
+
+function assertAlternate(html, language, href, description) {
+  const alternateLinks = html.match(/<link[^>]+rel="alternate"[^>]*>/g) ?? [];
+  const expectedPath = href.replace(/\/$/, '');
+  const matched = alternateLinks.some((link) => {
+    const languageMatch = link.match(/hreflang="([^"]+)"/i);
+    const hrefMatch = link.match(/href="([^"]+)"/i);
+    if (languageMatch?.[1] !== language || !hrefMatch?.[1]) return false;
+
+    const pathname = new URL(hrefMatch[1], 'http://static.local').pathname.replace(/\/$/, '');
+    return pathname === expectedPath;
+  });
+
+  if (!matched) {
+    throw new Error(`${description} 缺少：hreflang=${language}, href=${href}`);
+  }
+}
+
+function assertAppIcon(html, description) {
+  const iconLinks = html.match(/<link\b[^>]*>/gi) ?? [];
+  const matched = iconLinks.some((link) => {
+    const relMatch = link.match(/\brel="([^"]+)"/i);
+    const typeMatch = link.match(/\btype="([^"]+)"/i);
+    const hrefMatch = link.match(/\bhref="([^"]+)"/i);
+    if (
+      relMatch?.[1].toLowerCase() !== 'icon' ||
+      typeMatch?.[1].toLowerCase() !== 'image/png' ||
+      !hrefMatch?.[1]
+    ) {
+      return false;
+    }
+
+    try {
+      return new URL(hrefMatch[1], 'http://static.local').pathname === publicPath('/icon.png');
+    } catch {
+      return false;
+    }
+  });
+
+  if (!matched) {
+    throw new Error(
+      `${description} 缺少 app icon：rel=icon, type=image/png, href pathname=${publicPath('/icon.png')}`,
+    );
+  }
+}
+
+const requiredFiles = [
+  'icon.png',
+  'index.html',
+  '404.html',
+  'zh-tw/index.html',
+  'zh-cn/index.html',
+  'en/index.html',
+  'zh-tw/settings/index.html',
+  'zh-cn/settings/index.html',
+  'en/settings/index.html',
+  'zh-tw/tools/index.html',
+  'zh-cn/tools/index.html',
+  'en/tools/index.html',
+  'zh-tw/tools/mining/index.html',
+  'zh-cn/tools/mining/index.html',
+  'en/tools/mining/index.html',
+  'zh-tw/tools/level-conversion/index.html',
+  'zh-cn/tools/level-conversion/index.html',
+  'en/tools/level-conversion/index.html',
+  'zh-tw/tools/black-market/index.html',
+  'zh-cn/tools/black-market/index.html',
+  'en/tools/black-market/index.html',
+  'zh-tw/tools/dungeon/index.html',
+  'zh-cn/tools/dungeon/index.html',
+  'en/tools/dungeon/index.html',
+  'zh-tw/tools/search-reward/index.html',
+  'zh-cn/tools/search-reward/index.html',
+  'en/tools/search-reward/index.html',
+  'zh-tw/guides/gang/index.html',
+  'zh-cn/guides/index.html',
+  'zh-cn/guides/gang/index.html',
+  'en/guides/gang/index.html',
+  'zh-tw/blog/index.html',
+  'zh-cn/blog/index.html',
+  'en/blog/index.html',
+  'zh-tw/tools/helper-overview/index.html',
+  'zh-cn/tools/helper-overview/index.html',
+  'en/tools/helper-overview/index.html',
+  'zh-tw/about/index.html',
+  'zh-cn/about/index.html',
+  'en/about/index.html',
+  'zh-tw/about/privacy/index.html',
+  'zh-cn/about/privacy/index.html',
+  'en/about/privacy/index.html',
+  'zh-tw/about/contributing/index.html',
+  'zh-cn/about/contribution-board/index.html',
+  'zh-tw/recommendations/index.html',
+  'zh-cn/recommendations/index.html',
+  'en/recommendations/index.html',
+  'api/search',
+  'llms.txt',
+  'llms-full.txt',
+  'llms.mdx/docs/zh-tw/tools/content.md',
+  'llms.mdx/docs/zh-tw/about/content.md',
+  'llms.mdx/docs/zh-tw/about/privacy/content.md',
+  'llms.mdx/docs/zh-tw/recommendations/content.md',
+  'llms.mdx/docs/zh-cn/tools/content.md',
+  'llms.mdx/docs/zh-cn/about/contribution-board/content.md',
+  'llms.mdx/docs/zh-cn/about/privacy/content.md',
+  'llms.mdx/docs/en/about/privacy/content.md',
+  'og/docs/zh-tw/tools/image.png',
+  'og/docs/zh-tw/about/image.png',
+  'og/docs/zh-tw/about/privacy/image.png',
+  'og/docs/zh-tw/recommendations/image.png',
+  'og/docs/zh-cn/tools/image.png',
+  'og/docs/zh-cn/about/contribution-board/image.png',
+  'og/docs/zh-cn/about/privacy/image.png',
+  'og/docs/en/about/privacy/image.png',
+];
+
+for (const relativePath of requiredFiles) await ensureFile(relativePath);
+
+const exportedFiles = await collectFiles(outputRoot, () => true);
+const retiredWebsiteRoutes = exportedFiles
+  .map((filePath) => path.relative(outputRoot, filePath).split(path.sep).join('/'))
+  .filter((relativePath) => /\/blog\/(?:website|__empty-blog__)(?:\/|\.|$)/.test(relativePath));
+if (retiredWebsiteRoutes.length > 0) {
+  throw new Error(`Static Export 不應包含已移除的網站說明文章：${retiredWebsiteRoutes.join(', ')}`);
+}
+
+const privateAuthoringRoutes = exportedFiles
+  .map((filePath) => path.relative(outputRoot, filePath).split(path.sep).join('/'))
+  .filter((relativePath) => relativePath.includes('/about/content-authoring/'));
+
+if (privateAuthoringRoutes.length > 0) {
+  throw new Error(
+    `Static Export 不應包含私人內容規範頁、Markdown 或 OG 圖片：${privateAuthoringRoutes.join(', ')}`,
+  );
+}
+
+const contributorDetailRoutes = exportedFiles
+  .map((filePath) => path.relative(outputRoot, filePath).split(path.sep).join('/'))
+  .filter((relativePath) => /^(zh-tw|zh-cn|en)\/about\/contributors\//.test(relativePath));
+
+if (contributorDetailRoutes.length > 0) {
+  throw new Error(
+    `Static Export 不應包含 contributor 明細路由：${contributorDetailRoutes.join(', ')}`,
+  );
+}
+
+const representativePages = [
+  ['zh-tw/settings/index.html', '玩家與計算設定'],
+  ['zh-cn/settings/index.html', '玩家与计算设置'],
+  ['en/settings/index.html', 'Player &amp; calculation settings'],
+  ['zh-cn/tools/index.html', '工具总览'],
+  ['zh-cn/guides/index.html', '教程总览'],
+  ['zh-cn/blog/index.html', '文章'],
+  ['zh-cn/about/contribution-board/index.html', '贡献看板'],
+  ['zh-tw/tools/mining/index.html', '挖礦等級與收益'],
+  ['zh-tw/tools/level-conversion/index.html', '等級換算'],
+  ['zh-tw/tools/black-market/index.html', '黑市收益'],
+  ['zh-tw/tools/dungeon/index.html', '地城評估'],
+  ['zh-tw/tools/search-reward/index.html', '搜索收益計算器'],
+  ['zh-tw/guides/gang/index.html', '公會功能'],
+  ['zh-tw/blog/index.html', '一些廢文。'],
+  ['en/blog/index.html', 'Some random ramblings.'],
+  ['zh-tw/tools/helper-overview/index.html', 'CCO Helper 簡介'],
+  ['en/tools/search-reward/index.html', 'This page is not available in English yet'],
+  ['zh-cn/tools/search-reward/index.html', '此页面暂未提供简体中文版本'],
+  ['en/guides/gang/index.html', 'This page is not available in English yet'],
+  ['zh-cn/guides/gang/index.html', '此页面暂未提供简体中文版本'],
+  ['en/tools/helper-overview/index.html', 'This page is not available in English yet'],
+  ['zh-cn/tools/helper-overview/index.html', '此页面暂未提供简体中文版本'],
+  ['en/tools/mining/index.html', 'This page is not available in English yet'],
+  ['en/tools/level-conversion/index.html', 'This page is not available in English yet'],
+  ['en/tools/black-market/index.html', 'This page is not available in English yet'],
+  ['en/tools/dungeon/index.html', 'This page is not available in English yet'],
+  ['zh-tw/about/index.html', '網站開始建立'],
+  ['zh-tw/about/privacy/index.html', '隱私說明'],
+  ['zh-tw/about/contributing/index.html', '投稿格式'],
+  ['zh-cn/about/index.html', '此页面暂未提供简体中文版本'],
+  ['zh-cn/about/privacy/index.html', '隐私说明'],
+  ['zh-cn/recommendations/index.html', '此页面暂未提供简体中文版本'],
+  ['zh-tw/recommendations/index.html', 'SL DATA'],
+  ['en/about/index.html', 'This page is not available in English yet'],
+  ['en/about/privacy/index.html', 'Privacy Notice'],
+  ['en/recommendations/index.html', 'This page is not available in English yet'],
+];
+
+for (const [relativePath, expected] of representativePages) {
+  assertIncludes(await readOutput(relativePath), expected, `代表頁面 ${relativePath}`);
+}
+
+for (const [relativePath, description] of [
+  ['index.html', '首頁'],
+  ['zh-tw/index.html', '繁中首頁'],
+  ['zh-cn/index.html', '簡中首頁'],
+  ['en/index.html', '英文首頁'],
+  ['zh-tw/tools/mining/index.html', '深層工具頁'],
+]) {
+  assertAppIcon(await readOutput(relativePath), description);
+}
+
+for (const relativePath of [
+  'zh-tw/tools/mining/index.html',
+  'zh-tw/guides/gang/index.html',
+  'zh-tw/blog/index.html',
+  'en/tools/search-reward/index.html',
+  'en/blog/index.html',
+]) {
+  assertExcludes(
+    await readOutput(relativePath),
+    'related-content-heading',
+    `代表頁面 ${relativePath}`,
+  );
+}
+
+const toolPage = await readOutput('zh-tw/tools/index.html');
+const simplifiedToolPage = await readOutput('zh-cn/tools/index.html');
+const englishToolPage = await readOutput('en/tools/index.html');
+const settingsPage = await readOutput('zh-tw/settings/index.html');
+const simplifiedSettingsPage = await readOutput('zh-cn/settings/index.html');
+const englishSettingsPage = await readOutput('en/settings/index.html');
+const englishFallbackToolPage = await readOutput('en/tools/search-reward/index.html');
+const simplifiedFallbackToolPage = await readOutput('zh-cn/tools/search-reward/index.html');
+const blogPage = await readOutput('zh-tw/blog/index.html');
+const buffsAndItemsPage = await readOutput('zh-tw/guides/buffs-and-items/index.html');
+const aboutPage = await readOutput('zh-tw/about/index.html');
+const privacyPage = await readOutput('zh-tw/about/privacy/index.html');
+const recommendationsPage = await readOutput('zh-tw/recommendations/index.html');
+const englishAboutPage = await readOutput('en/about/index.html');
+const englishPrivacyPage = await readOutput('en/about/privacy/index.html');
+const simplifiedChinesePrivacyPage = await readOutput('zh-cn/about/privacy/index.html');
+const englishRecommendationsPage = await readOutput('en/recommendations/index.html');
+const helperOverviewPage = await readOutput('zh-tw/tools/helper-overview/index.html');
+
+const verticalSlicePages = [
+  'tools/search-reward',
+  'tools/mining',
+  'tools/level-conversion',
+  'tools/black-market',
+  'tools/dungeon',
+  'guides/gang',
+  'tools/helper-overview',
+];
+
+assertIncludes(
+  buffsAndItemsPage,
+  `href="${publicPath('/zh-tw/guides/cache-and-equipment/')}"`,
+  'Guide 正文站內連結',
+);
+
+function getContentTargetPath(pathname) {
+  const withoutBasePath = basePath && pathname.startsWith(`${basePath}/`)
+    ? pathname.slice(basePath.length)
+    : pathname;
+  const normalizedPath = withoutBasePath.replace(/^\/+|\/+$/g, '');
+
+  if (!/^(zh-tw|zh-cn|en)\/(tools|guides|blog|about|recommendations|settings)\/.+/.test(normalizedPath)) {
+    return undefined;
+  }
+
+  return normalizedPath;
+}
+
+async function assertStaticContentLinks() {
+  const htmlFiles = await collectHtmlFiles(outputRoot);
+
+  for (const filePath of htmlFiles) {
+    const relativeFilePath = path.relative(outputRoot, filePath).split(path.sep).join('/');
+    const pagePath = relativeFilePath.replace(/\/index\.html$/, '');
+    const baseUrl = `https://static.local${publicPath('/' + pagePath)}/`;
+    const html = await readFile(filePath, 'utf8');
+
+    for (const [, href] of html.matchAll(/(?:^|\s)href="([^"]+)"/g)) {
+      const url = new URL(href, baseUrl);
+      if (url.origin !== 'https://static.local') continue;
+
+      const targetPath = getContentTargetPath(url.pathname);
+      if (!targetPath) continue;
+
+      await ensureFile(`${targetPath}/index.html`);
+    }
+  }
+}
+
+await assertStaticContentLinks();
+
+const staticTextFiles = await collectFiles(
+  outputRoot,
+  (name) => /\.(?:css|html|js|json|svg|txt|xml)$/.test(name),
+);
+for (const filePath of staticTextFiles) {
+  const content = await readFile(filePath, 'utf8');
+  if (content.includes('cco-found-zh-cn-terminology')) {
+    throw new Error(`Static Export 不應包含暫存 Game Data 版本：${path.relative(outputRoot, filePath)}`);
+  }
+}
+
+function getDesktopSidebarMarkup(html, relativePath) {
+  const start = html.indexOf('<aside id="nd-sidebar"');
+  const end = html.indexOf('</aside>', start);
+  if (start < 0 || end < 0) {
+    throw new Error(`代表頁面 ${relativePath} 缺少文件側欄標記`);
+  }
+
+  return html.slice(start, end);
+}
+
+if (getDesktopSidebarMarkup(toolPage, 'zh-tw/tools/index.html').includes(publicPath('/zh-tw/blog/'))) {
+  throw new Error('文件側欄不應包含 Blog 區段');
+}
+
+if (
+  getDesktopSidebarMarkup(
+    englishFallbackToolPage,
+    'en/tools/search-reward/index.html',
+  ).includes(publicPath('/en/blog/'))
+) {
+  throw new Error('英文文件 fallback 側欄不應包含 Blog 區段');
+}
+
+if (
+  getDesktopSidebarMarkup(
+    simplifiedFallbackToolPage,
+    'zh-cn/tools/search-reward/index.html',
+  ).includes(publicPath('/zh-cn/blog/'))
+) {
+  throw new Error('簡中文件 fallback 側欄不應包含 Blog 區段');
+}
+
+const docsSidebar = getDesktopSidebarMarkup(toolPage, 'zh-tw/tools/index.html');
+const simplifiedDocsSidebar = getDesktopSidebarMarkup(
+  simplifiedToolPage,
+  'zh-cn/tools/index.html',
+);
+for (const title of [
+  '背包升级规划',
+  '黑市收益',
+  '地下城评估',
+  '活动收益总览',
+  '等级换算',
+  '箱子／掉落价值分析',
+  '挖矿等级与收益',
+  '搜索收益计算器',
+  'CCO Helper 简介',
+]) {
+  assertIncludes(simplifiedDocsSidebar, title, '簡中工具側欄標題');
+}
+for (const title of [
+  '背包升級規劃',
+  '地城評估',
+  '活動收益總覽',
+  '等級換算',
+  '箱子／掉落價值分析',
+  '挖礦等級與收益',
+  '搜索收益計算器',
+  'CCO Helper 簡介',
+]) {
+  if (simplifiedDocsSidebar.includes(title)) {
+    throw new Error(`簡中工具側欄不應包含繁中標題：${title}`);
+  }
+}
+for (const section of ['about', 'recommendations']) {
+  if (docsSidebar.includes(publicPath(`/zh-tw/${section}/`))) {
+    throw new Error(`文件側欄不應包含全站頁面：${section}`);
+  }
+}
+
+assertIncludes(
+  englishFallbackToolPage,
+  publicPath('/en/tools/search-reward/'),
+  '英文工具 fallback 導覽連結',
+);
+assertIncludes(
+  simplifiedFallbackToolPage,
+  publicPath('/zh-tw/tools/search-reward/'),
+  '簡中工具 fallback 繁中來源連結',
+);
+if (/hrefLang="zh-CN"/i.test(simplifiedFallbackToolPage)) {
+  throw new Error('簡中工具 fallback 不應將 fallback 頁面宣告為 zh-CN alternate');
+}
+assertIncludes(
+  await readOutput('en/guides/gang/index.html'),
+  publicPath('/en/guides/gang/'),
+  '英文教學 fallback 導覽連結',
+);
+assertIncludes(
+  await readOutput('en/tools/helper-overview/index.html'),
+  publicPath('/en/tools/helper-overview/'),
+  '英文 Helper fallback 導覽連結',
+);
+for (const locale of ['zh-tw', 'zh-cn', 'en']) {
+  const page = await readOutput(`${locale}/blog/index.html`);
+  assertExcludes(page, '/blog/website', 'Blog 已移除文章連結');
+  assertExcludes(page, 'CCO Toolkit 網站說明', 'Blog 已移除文章標題');
+}
+assertIncludes(englishAboutPage, publicPath('/zh-tw/about/'), '英文 About fallback 導覽連結');
+assertExcludes(
+  aboutPage,
+  'content-authoring',
+  'About 私人內容規範連結',
+);
+assertIncludes(aboutPage, 'href="./privacy"', 'About 隱私說明連結');
+const privacyNoticeSources = [
+  {
+    locale: '繁中',
+    sourcePath: path.join('content', 'about', 'privacy.mdx'),
+    datePrefix: '更新日期：',
+    page: privacyPage,
+  },
+  {
+    locale: '英文',
+    sourcePath: path.join('content', 'about', 'privacy.en.mdx'),
+    datePrefix: 'Updated: ',
+    page: englishPrivacyPage,
+  },
+  {
+    locale: '簡中',
+    sourcePath: path.join('content', 'about', 'privacy.zh-cn.mdx'),
+    datePrefix: '更新日期：',
+    page: simplifiedChinesePrivacyPage,
+  },
+];
+const privacyNoticeDates = [];
+for (const { locale, sourcePath, datePrefix, page } of privacyNoticeSources) {
+  const source = await readFile(path.join(projectRoot, sourcePath), 'utf8');
+  const dateLine = source
+    .split(/\r?\n/)
+    .find((line) => line.startsWith(datePrefix));
+  const date = dateLine?.slice(datePrefix.length);
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    throw new Error(
+      locale + '隱私說明原始 MDX 缺少有效的 YYYY-MM-DD 更新日期',
+    );
+  }
+
+  const parsedDate = new Date(date + 'T00:00:00.000Z');
+  if (
+    Number.isNaN(parsedDate.getTime()) ||
+    parsedDate.toISOString().slice(0, 10) !== date
+  ) {
+    throw new Error(locale + '隱私說明原始 MDX 的更新日期無效：' + date);
+  }
+
+  assertIncludes(page, datePrefix + date, locale + '隱私說明日期');
+  privacyNoticeDates.push(date);
+}
+if (new Set(privacyNoticeDates).size !== 1) {
+  throw new Error(
+    '三語隱私說明更新日期不一致：' + privacyNoticeDates.join(', '),
+  );
+}
+assertIncludes(privacyPage, 'localStorage', '隱私說明瀏覽器儲存');
+assertIncludes(privacyPage, '沒有設定或讀取 Cookie', '隱私說明 Cookie 狀態');
+assertIncludes(privacyPage, '推薦頁包含外部連結', '隱私說明推薦頁外部連結');
+assertExcludes(privacyPage, 'Imgur 遠端封面', '隱私說明過時遠端圖片');
+assertIncludes(englishPrivacyPage, 'localStorage', '英文隱私說明瀏覽器儲存');
+const privacySubmissionAssertions = [
+  {
+    locale: '繁中',
+    page: privacyPage,
+    expected: [
+      '前述 localStorage 說明不適用於私訊',
+      '官方 Discord 私訊',
+      '遊戲內私訊站長',
+      '沒有投稿表單或站內接收端',
+      '採用投稿前會另行取得適用授權的明確同意',
+      '公開署名或採用紀錄前',
+      '更正、隱藏或撤回',
+    ],
+  },
+  {
+    locale: '英文',
+    page: englishPrivacyPage,
+    expected: [
+      'localStorage description above does not apply to private messages',
+      'official CyberCode Online Discord',
+      'message the site owner in game',
+      'no contribution form or on-site receiving endpoint',
+      'confirmed separately before adoption',
+      'before publishing attribution or an adoption record',
+      'correction, hiding, or withdrawal',
+    ],
+  },
+  {
+    locale: '簡中',
+    page: simplifiedChinesePrivacyPage,
+    expected: [
+      '前述 localStorage 说明不适用于私信',
+      '官方 Discord 私信',
+      '游戏内私信站长',
+      '没有投稿表单或站内收件功能',
+      '采用投稿前会另行取得适用许可的明确同意',
+      '公开署名或采用记录前',
+      '更正、隐藏或撤回',
+    ],
+  },
+];
+for (const { locale, page, expected } of privacySubmissionAssertions) {
+  for (const phrase of expected) {
+    assertIncludes(page, phrase, locale + '隱私說明投稿告知');
+  }
+}
+assertIncludes(
+  englishRecommendationsPage,
+  publicPath('/zh-tw/recommendations/'),
+  '英文推薦 fallback 導覽連結',
+);
+assertIncludes(
+  await readOutput('zh-cn/recommendations/index.html'),
+  publicPath('/zh-tw/recommendations/'),
+  '簡中推薦 fallback 導覽連結',
+);
+assertIncludes(recommendationsPage, '值得收藏的工具、資料與社群網站。', '推薦頁 description');
+assertIncludes(recommendationsPage, '網站推薦', '推薦頁網站推薦標題');
+assertExcludes(
+  recommendationsPage,
+  '這裡整理與 CyberCode Online、資料查詢或日常使用相關的網站與其他推薦內容，目前的一般推薦包含 SL DATA。',
+  '推薦頁一般推薦說明',
+);
+assertExcludes(recommendationsPage, '公會推薦', '推薦頁公會推薦內容');
+assertExcludes(recommendationsPage, 'SUI', '推薦頁 SUI 內容');
+assertExcludes(recommendationsPage, '/images/recommendations/guilds/', '推薦頁公會封面資產');
+assertIncludes(aboutPage, '本網站的貢獻者與更新歷程。', 'About description');
+assertIncludes(helperOverviewPage, '正在穩定性測試與開發中...', 'Helper 公開狀態');
+const helperRenderedText = helperOverviewPage
+  .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
+  .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '')
+  .replace(/<[^>]+>/g, '');
+if ((helperRenderedText.match(/正在穩定性測試與開發中\.\.\./g) ?? []).length !== 1) {
+  throw new Error('Helper 開發狀態應僅在公開內文顯示一次');
+}
+if (![
+  '<strong><em>正在穩定性測試與開發中...</em></strong>',
+  '<em><strong>正在穩定性測試與開發中...</strong></em>',
+].some((markup) => helperOverviewPage.includes(markup))) {
+  throw new Error('Helper 公開狀態缺少粗斜體格式');
+}
+for (const heading of ['專案定位', '主要功能', '隱私與安全邊界', '相容性與限制']) {
+  assertExcludes(helperOverviewPage, heading, 'Helper 已移入私人文件的章節');
+}
+assertIncludes(recommendationsPage, 'https://hackmd.io/@temmie950807/SL_DATA', '推薦內容外部連結');
+assertIncludes(recommendationsPage, 'SL DATA：無封面，使用文件圖示', 'SL DATA 無封面佔位');
+assertExcludes(recommendationsPage, 'i.imgur.com', '推薦內容未授權封面');
+assertIncludes(
+  recommendationsPage,
+  'https://docs.google.com/spreadsheets/d/1wJLuZhZg_Xs1ouyjh6chntY8p3lcgNTuRU3-9JwKxQ4/edit?usp=sharing',
+  'CCO Found 外部連結',
+);
+assertIncludes(recommendationsPage, '關於CCO裡的機率、公式、遊戲細節進行整理', 'CCO Found 說明');
+assertIncludes(
+  recommendationsPage,
+  '使用前請先複製一分到自己雲端，不要直接修改共用檔案',
+  'CCO Found 備註',
+);
+assertIncludes(recommendationsPage, '@min-[48rem]:grid-cols-3', '推薦卡片三欄容器查詢');
+if (blogPage.includes('<article')) {
+  assertIncludes(blogPage, '@min-[48rem]:grid-cols-3', '文章卡片三欄容器查詢');
+} else {
+  assertIncludes(blogPage, '目前沒有已翻譯的文章。', 'Blog 空清單狀態');
+}
+
+const rootReferences = [...toolPage.matchAll(/(?:href|src)="(\/[^\"]*)"/g)].map(
+  (match) => match[1],
+);
+
+if (basePath) {
+  const invalidReferences = rootReferences.filter(
+    (reference) => !reference.startsWith(`${basePath}/`) && reference !== basePath,
+  );
+
+  if (invalidReferences.length > 0) {
+    throw new Error(`HTML 仍有未加 basePath 的根相對資產：${invalidReferences.join(', ')}`);
+  }
+}
+
+assertIncludes(toolPage, `${publicPath('/_next/')}`, 'Next 靜態資產路徑');
+assertIncludes(toolPage, `${publicPath('/zh-tw/tools/')}`, 'Navigation 連結');
+assertIncludes(settingsPage, `${publicPath('/zh-tw/settings')}`, '玩家設定 Navigation 連結');
+assertIncludes(simplifiedSettingsPage, `${publicPath('/zh-cn/settings')}`, '簡中玩家設定 Navigation 連結');
+assertIncludes(settingsPage, '只保存在目前瀏覽器', '共用設定瀏覽器儲存提示');
+assertIncludes(toolPage, '僅儲存在目前瀏覽器', '工具總覽隱私說明');
+assertIncludes(toolPage, '不會送到伺服器', '工具總覽隱私說明');
+assertIncludes(englishToolPage, 'stored only in the current browser', '英文工具總覽隱私說明');
+assertIncludes(englishToolPage, 'not sent to a server', '英文工具總覽隱私說明');
+for (const expected of [
+  'Player &amp; calculation settings',
+  'Manage player, equipment, and calculation data that multiple tools can reuse',
+  'At the bottom of the left sidebar, above the language selector',
+  'Click the player and gear icons in the top CCO Toolkit bar',
+]) {
+  assertIncludes(englishToolPage, expected, '英文工具總覽玩家與計算設定列');
+}
+for (const expected of [
+  '玩家与计算设置',
+  '管理可供多个工具沿用的玩家、装备与计算数据',
+  '位于左侧栏底部、语言选单上方',
+  '点击顶端 CCO Toolkit 栏中的玩家与齿轮图标',
+]) {
+  assertIncludes(simplifiedToolPage, expected, '簡中工具總覽玩家與計算設定列');
+}
+for (const [language, locale] of [['zh-TW', 'zh-tw'], ['zh-CN', 'zh-cn'], ['en', 'en']]) {
+  const href = publicPath(`/${locale}/settings`);
+  assertAlternate(settingsPage, language, href, '繁中設定頁 alternate metadata');
+  assertAlternate(simplifiedSettingsPage, language, href, '簡中設定頁 alternate metadata');
+  assertAlternate(englishSettingsPage, language, href, '英文設定頁 alternate metadata');
+}
+assertAlternate(simplifiedToolPage, 'zh-CN', publicPath('/zh-cn/tools'), '簡中工具總覽 alternate metadata');
+assertIncludes(toolPage, `${publicPath('/en/tools/')}`, 'alternate locale 路徑');
+assertIncludes(
+  toolPage,
+  `${publicPath('/og/docs/zh-tw/tools/image.png')}`,
+  'OG image metadata 路徑',
+);
+assertIncludes(
+  toolPage,
+  `${publicPath('/llms.mdx/docs/zh-tw/tools/content.md')}`,
+  'Markdown 下載路徑',
+);
+
+const llms = await readOutput('llms.txt');
+assertIncludes(llms, `](${publicPath('/zh-tw/tools')})`, 'LLM index 連結');
+
+const searchIndex = await readOutput('api/search');
+let parsedSearchIndex;
+try {
+  parsedSearchIndex = JSON.parse(searchIndex);
+} catch (error) {
+  throw new Error(`Static Search 索引不是有效 JSON：${error.message}`);
+}
+if (
+  parsedSearchIndex.type !== 'advanced' &&
+  parsedSearchIndex.type !== 'simple' &&
+  parsedSearchIndex.type !== 'i18n'
+) {
+  throw new Error('未知的搜尋索引格式');
+}
+
+for (const path of verticalSlicePages) {
+  assertIncludes(searchIndex, `/zh-tw/${path}`, '搜尋索引內容路徑');
+}
+
+for (const path of [
+  'tools',
+  'guides',
+  'blog',
+  'about/contribution-board',
+  'about/privacy',
+]) {
+  assertIncludes(searchIndex, `/zh-cn/${path}`, '簡中搜尋索引內容路徑');
+}
+if (searchIndex.includes('/zh-cn/tools/mining')) {
+  throw new Error('搜尋索引不應將 fallback 的簡中工具頁當成實際翻譯內容');
+}
+
+for (const title of [
+  '搜索收益計算器',
+  '公會功能',
+  'CCO Helper 簡介',
+  '關於',
+  '推薦',
+  '隱私說明',
+  '工具总览',
+  '教程总览',
+  '文章总览',
+  '贡献看板',
+  '隐私说明',
+]) {
+  assertIncludes(searchIndex, title, '搜尋索引內容標題');
+}
+assertExcludes(searchIndex, 'content-authoring', '搜尋索引私人規範路徑');
+assertExcludes(searchIndex, '內容撰寫規範', '搜尋索引私人規範標題');
+const fullMarkdown = await readOutput('llms-full.txt');
+for (const [label, output] of [['搜尋索引', searchIndex], ['完整 Markdown', fullMarkdown]]) {
+  assertExcludes(output, '/blog/website', `${label} 已移除文章路徑`);
+  assertExcludes(output, 'CCO Toolkit 網站說明', `${label} 已移除文章標題`);
+  assertExcludes(
+    output,
+    'CCO Helper 是 CCO 的非官方 Tampermonkey',
+    `${label} 私人 Helper 詳細內容`,
+  );
+  assertExcludes(output, 'retired-website-article', `${label} 私人文章備份`);
+  assertExcludes(output, 'cco-helper-overview', `${label} 私人 Helper 備份`);
+}
+assertExcludes(await readOutput('llms-full.txt'), '內容撰寫規範', '完整 Markdown 私人規範內容');
+
+const javascriptFiles = await collectJavaScriptFiles(path.join(outputRoot, '_next'));
+const searchClientSource = await Promise.all(
+  javascriptFiles.map((filePath) => readFile(filePath, 'utf8')),
+);
+const searchClientHasPath = searchClientSource.some((source) => {
+  if (!source.includes('/api/search')) return false;
+  return !basePath || source.includes(basePath);
+});
+if (!searchClientHasPath) {
+  throw new Error(`搜尋 client 未嵌入正確的索引設定：${publicPath('/api/search')}`);
+}
+
+console.log(`Static Export 驗證通過（basePath：${basePath || '根目錄'}）。`);

@@ -1,0 +1,8 @@
+{
+  "title": "推荐",
+  "description": "推荐值得收藏的工具、资料、社区网站与其他内容。",
+  "root": true,
+  "pageTitles": {
+    "index": "推荐"
+  }
+}

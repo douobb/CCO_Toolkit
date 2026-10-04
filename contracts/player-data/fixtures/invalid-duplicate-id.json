@@ -1,0 +1,22 @@
+{
+  "format": "cco-player-data",
+  "formatVersion": 1,
+  "exportedAt": "2026-08-30T00:00:00.000Z",
+  "producer": {
+    "app": "cco-toolkit",
+    "appVersion": "0.1.0"
+  },
+  "sections": [
+    {
+      "id": "inventory",
+      "schemaVersion": 1,
+      "data": {
+        "completeness": "manual",
+        "items": [
+          { "itemId": "tech-scrap", "quantity": 1 },
+          { "itemId": "tech-scrap", "quantity": 2 }
+        ]
+      }
+    }
+  ]
+}

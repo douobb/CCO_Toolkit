@@ -1,0 +1,59 @@
+{
+  "sourceTableVersion": "0.1866",
+  "boxes": [
+    {
+      "id": "white",
+      "labels": { "zh-tw": "白箱", "zh-cn": "白箱", "en": "White Box" },
+      "batchSize": 12,
+      "containerItemId": "locked-container",
+      "techScrapCost": 32,
+      "verification": "confirmed",
+      "entries": [
+        { "id": "hash-16", "itemId": "hash", "quantity": 16, "weight": 100, "verification": "confirmed" },
+        { "id": "tech-scrap-16", "itemId": "tech-scrap", "quantity": 16, "weight": 100, "verification": "confirmed" },
+        { "id": "supply-crate-gang-2", "itemId": "supply-crate-gang", "quantity": 2, "weight": 100, "verification": "confirmed" },
+        { "id": "protocol-breach-shard-1", "itemId": "protocol-breach-shard", "quantity": 1, "weight": 100, "verification": "confirmed" },
+        { "id": "ai-core-2", "itemId": "ai-core", "quantity": 2, "weight": 100, "verification": "confirmed" },
+        { "id": "tech-scrap-128", "itemId": "tech-scrap", "quantity": 128, "weight": 50, "verification": "confirmed" },
+        { "id": "equipment-yellow-1", "category": "equipment", "rarity": "yellow", "quantity": 1, "weight": 20, "verification": "confirmed" },
+        { "id": "ai-core-4", "itemId": "ai-core", "quantity": 4, "weight": 10, "verification": "confirmed" },
+        { "id": "equipment-purple-1", "category": "equipment", "rarity": "purple", "quantity": 1, "weight": 10, "verification": "confirmed" }
+      ]
+    },
+    {
+      "id": "yellow",
+      "labels": { "zh-tw": "黃箱", "zh-cn": "黄箱", "en": "Yellow Box" },
+      "batchSize": 8,
+      "containerItemId": "locked-rare-container",
+      "techScrapCost": 64,
+      "verification": "confirmed",
+      "entries": [
+        { "id": "hash-64", "itemId": "hash", "quantity": 64, "weight": 2000, "verification": "confirmed" },
+        { "id": "ai-core-8", "itemId": "ai-core", "quantity": 8, "weight": 1000, "verification": "confirmed" },
+        { "id": "old-pouch-1", "itemId": "old-pouch", "quantity": 1, "weight": 1000, "verification": "confirmed" },
+        { "id": "equipment-purple-1", "category": "equipment", "rarity": "purple", "quantity": 1, "weight": 1000, "verification": "confirmed" },
+        { "id": "equipment-yellow-1", "category": "equipment", "rarity": "yellow", "quantity": 1, "weight": 500, "verification": "confirmed" },
+        { "id": "cybertunnel-vpn-1", "itemId": "cybertunnel-vpn", "quantity": 1, "weight": 100, "verification": "confirmed" },
+        { "id": "reward-booster-shard-1", "itemId": "reward-booster-shard", "quantity": 1, "weight": 1, "verification": "confirmed" },
+        { "id": "ai-core-12", "itemId": "ai-core", "quantity": 12, "weight": 12, "verification": "confirmed" },
+        { "id": "ai-core-20", "itemId": "ai-core", "quantity": 20, "weight": 80, "verification": "confirmed" },
+        { "id": "dungeon-token-1", "itemId": "dungeon-token", "quantity": 1, "weight": 10, "verification": "confirmed" }
+      ]
+    },
+    {
+      "id": "purple",
+      "labels": { "zh-tw": "紫箱", "zh-cn": "紫箱", "en": "Purple Box" },
+      "batchSize": 4,
+      "containerItemId": "locked-legendary-container",
+      "techScrapCost": 128,
+      "verification": "confirmed",
+      "entries": [
+        { "id": "ai-core-32", "itemId": "ai-core", "quantity": 32, "weight": 1000, "verification": "confirmed" },
+        { "id": "equipment-purple-1", "category": "equipment", "rarity": "purple", "quantity": 1, "weight": 500, "verification": "confirmed" },
+        { "id": "hash-128", "itemId": "hash", "quantity": 128, "weight": 100, "verification": "confirmed" },
+        { "id": "cybertunnel-vpn-1", "itemId": "cybertunnel-vpn", "quantity": 1, "weight": 5, "verification": "confirmed" },
+        { "id": "equipment-red-1", "category": "equipment", "rarity": "red", "quantity": 1, "weight": 1, "verification": "confirmed" }
+      ]
+    }
+  ]
+}

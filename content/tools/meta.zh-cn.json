@@ -1,0 +1,31 @@
+{
+  "title": "工具",
+  "description": "CyberCode Online 的互动计算工具。",
+  "root": true,
+  "pagesIndex": "index",
+  "pages": [
+    "---工具---",
+    "backpack-planner",
+    "black-market",
+    "dungeon",
+    "earnings-overview",
+    "level-conversion",
+    "loot-box-analysis",
+    "mining",
+    "search-reward",
+    "---CCO Helper---",
+    "helper-overview"
+  ],
+  "pageTitles": {
+    "index": "工具总览",
+    "backpack-planner": "背包升级规划",
+    "black-market": "黑市收益",
+    "dungeon": "地下城评估",
+    "earnings-overview": "活动收益总览",
+    "level-conversion": "等级换算",
+    "loot-box-analysis": "箱子／掉落价值分析",
+    "mining": "挖矿等级与收益",
+    "search-reward": "搜索收益计算器",
+    "helper-overview": "CCO Helper 简介"
+  }
+}

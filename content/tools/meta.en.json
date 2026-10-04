@@ -1,0 +1,19 @@
+{
+  "title": "Tools",
+  "description": "Interactive calculators for CyberCode Online.",
+  "root": true,
+  "pagesIndex": "index",
+  "pages": [
+    "---Tools---",
+    "backpack-planner",
+    "black-market",
+    "dungeon",
+    "earnings-overview",
+    "level-conversion",
+    "loot-box-analysis",
+    "mining",
+    "search-reward",
+    "---CCO Helper---",
+    "helper-overview"
+  ]
+}

@@ -1,0 +1,183 @@
+{
+  "levels": [
+    {
+      "id": "level",
+      "kind": "player-level",
+      "labels": { "zh-tw": "等級", "zh-cn": "人物等级", "en": "Player Level" },
+      "range": { "min": 1, "max": 800, "step": 1 },
+      "defaultValue": 1,
+      "control": "integer",
+      "verification": "confirmed"
+    },
+    {
+      "id": "printing-rank",
+      "kind": "skill-level",
+      "labels": { "zh-tw": "分子列印等級", "zh-cn": "打印等级", "en": "Molecular Printing Level" },
+      "range": { "min": 1, "max": 800, "step": 1 },
+      "defaultValue": 1,
+      "control": "integer",
+      "verification": "confirmed"
+    },
+    {
+      "id": "medical-science",
+      "kind": "skill-level",
+      "labels": { "zh-tw": "醫學等級", "zh-cn": "医学等级", "en": "Medical Science Level" },
+      "range": { "min": 1, "max": 800, "step": 1 },
+      "defaultValue": 1,
+      "control": "integer",
+      "verification": "confirmed"
+    },
+    {
+      "id": "ammo-crafting",
+      "kind": "skill-level",
+      "labels": { "zh-tw": "彈藥製作等級", "zh-cn": "弹药制作等级", "en": "Ammunition Crafting Level" },
+      "range": { "min": 1, "max": 800, "step": 1 },
+      "defaultValue": 1,
+      "control": "integer",
+      "verification": "confirmed"
+    },
+    {
+      "id": "scavenge-skill",
+      "kind": "skill-level",
+      "labels": { "zh-tw": "搜索等級", "zh-cn": "探索等级", "en": "Scavenging Level" },
+      "range": { "min": 1, "max": 800, "step": 1 },
+      "defaultValue": 1,
+      "control": "integer",
+      "verification": "confirmed"
+    },
+    {
+      "id": "mining-skill",
+      "kind": "skill-level",
+      "labels": { "zh-tw": "挖礦等級", "zh-cn": "挖矿等级", "en": "Mining Level" },
+      "range": { "min": 1, "max": 800, "step": 1 },
+      "defaultValue": 1,
+      "control": "integer",
+      "verification": "confirmed"
+    }
+  ],
+  "methods": {
+    "level": [
+      {
+        "id": "ai",
+        "formulaId": "level-ai",
+        "batchSize": 8,
+        "unitMinutes": 3,
+        "resourceRecovery": 1,
+        "resources": [{ "id": "ai", "perUnit": 1 }],
+        "verification": "confirmed"
+      }
+    ],
+    "printing-rank": [
+      {
+        "id": "black-market",
+        "formulaId": "printing-black-market",
+        "batchSize": 1000,
+        "unitMinutes": 0.023333333333333334,
+        "resourceRecovery": 1,
+        "resources": [{ "id": "cache", "perUnit": 1 }],
+        "verification": "confirmed"
+      },
+      {
+        "id": "printing-job",
+        "formulaId": "printing-job",
+        "batchSize": 8,
+        "unitMinutes": 3,
+        "resourceRecovery": 1,
+        "resources": [],
+        "verification": "confirmed"
+      },
+      {
+        "id": "reverse-engineering",
+        "formulaId": "printing-reverse-engineering",
+        "batchSize": 100,
+        "unitMinutes": 0.02,
+        "resourceRecovery": 1,
+        "resources": [{ "id": "tech-scrap", "perUnit": 1 }],
+        "verification": "confirmed"
+      }
+    ],
+    "medical-science": [
+      {
+        "id": "medical-scrap",
+        "formulaId": "medical-scrap",
+        "batchSize": 100,
+        "unitMinutes": null,
+        "resourceRecovery": 0.5,
+        "resources": [{ "id": "medical-tech-parts", "perUnit": 1 }],
+        "verification": "confirmed"
+      },
+      {
+        "id": "medical-job",
+        "formulaId": "medical-job",
+        "batchSize": 8,
+        "unitMinutes": 3,
+        "resourceRecovery": 1,
+        "resources": [],
+        "verification": "confirmed"
+      }
+    ],
+    "ammo-crafting": [
+      {
+        "id": "energy-cell",
+        "formulaId": "ammo-energy-cell",
+        "batchSize": 100,
+        "unitMinutes": null,
+        "resourceRecovery": 1,
+        "resources": [{ "id": "ammunition-tech-parts", "perUnit": 1 }],
+        "verification": "confirmed"
+      },
+      {
+        "id": "anti-matter-charge",
+        "formulaId": "ammo-anti-matter-charge",
+        "batchSize": 100,
+        "unitMinutes": null,
+        "resourceRecovery": 1,
+        "resources": [{ "id": "military-ammunition-tech-parts", "perUnit": 1 }],
+        "verification": "confirmed"
+      },
+      {
+        "id": "ammo-job",
+        "formulaId": "ammo-job",
+        "batchSize": 8,
+        "unitMinutes": 3,
+        "resourceRecovery": 1,
+        "resources": [],
+        "verification": "confirmed"
+      }
+    ],
+    "scavenge-skill": [
+      {
+        "id": "scavenge",
+        "formulaId": "scavenge",
+        "batchSize": 10,
+        "unitMinutes": 3,
+        "resourceRecovery": 1,
+        "resources": [],
+        "verification": "confirmed"
+      }
+    ],
+    "mining-skill": [
+      {
+        "id": "mining",
+        "formulaId": "mining",
+        "batchSize": 8,
+        "unitMinutes": 3,
+        "resourceRecovery": 1,
+        "resources": [{ "id": "hash", "perUnit": 1 }],
+        "verification": "confirmed"
+      },
+      {
+        "id": "ai-crafting",
+        "formulaId": "mining-ai-crafting",
+        "batchSize": 100,
+        "unitMinutes": 1,
+        "resourceRecovery": 1,
+        "resources": [
+          { "id": "hash", "perUnit": 20 },
+          { "id": "tech-scrap", "perUnit": 10 }
+        ],
+        "verification": "confirmed"
+      }
+    ]
+  }
+}

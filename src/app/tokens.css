@@ -1,0 +1,133 @@
+/*
+ * CCO Toolkit token architecture
+ *
+ * Primitive tokens define stable scales. Semantic tokens point to Fumadocs'
+ * existing theme variables, and component tokens provide named dimensions
+ * for reusable UI primitives. Keeping these layers separate lets the site
+ * inherit Fumadocs' light/dark behavior without creating a second visual
+ * language.
+ */
+
+/* Primitive tokens: stable, context-independent scales. */
+:root {
+  --cco-space-0: 0rem;
+  --cco-space-1: 0.25rem;
+  --cco-space-2: 0.5rem;
+  --cco-space-3: 0.75rem;
+  --cco-space-4: 1rem;
+  --cco-space-5: 1.25rem;
+  --cco-space-6: 1.5rem;
+  --cco-space-8: 2rem;
+  --cco-space-10: 2.5rem;
+  --cco-space-12: 3rem;
+  --cco-space-16: 4rem;
+
+  --cco-radius-sm: 0.25rem;
+  --cco-radius-md: 0.375rem;
+  --cco-radius-lg: 0.5rem;
+  --cco-radius-xl: 0.75rem;
+
+  --cco-font-size-xs: 0.75rem;
+  --cco-font-size-sm: 0.875rem;
+  --cco-font-size-base: 1rem;
+  --cco-font-size-lg: 1.125rem;
+  --cco-font-weight-medium: 500;
+  --cco-font-weight-semibold: 600;
+  --cco-font-weight-bold: 700;
+
+  --cco-duration-fast: 150ms;
+  --cco-duration-normal: 200ms;
+}
+
+/* Semantic tokens: aliases to Fumadocs' existing light/dark theme. */
+:root {
+  --background: var(--color-fd-background);
+  --foreground: var(--color-fd-foreground);
+  --card: var(--color-fd-card);
+  --card-foreground: var(--color-fd-card-foreground);
+  --popover: var(--color-fd-popover);
+  --popover-foreground: var(--color-fd-popover-foreground);
+  --primary: var(--color-fd-primary);
+  --primary-foreground: var(--color-fd-primary-foreground);
+  --secondary: var(--color-fd-secondary);
+  --secondary-foreground: var(--color-fd-secondary-foreground);
+  --muted: var(--color-fd-muted);
+  --muted-foreground: var(--color-fd-muted-foreground);
+  --accent: var(--color-fd-accent);
+  --accent-foreground: var(--color-fd-accent-foreground);
+  --destructive: var(--color-fd-error);
+  --destructive-foreground: var(--color-fd-background);
+  --border: var(--color-fd-border);
+  --input: var(--color-fd-border);
+  --ring: var(--color-fd-ring);
+
+  --cco-color-success: var(--color-fd-success);
+  --cco-color-warning: var(--color-fd-warning);
+  --cco-color-info: var(--color-fd-info);
+  --cco-color-error: var(--color-fd-error);
+
+  --cco-space-component-xs: var(--cco-space-2);
+  --cco-space-component-sm: var(--cco-space-3);
+  --cco-space-component: var(--cco-space-4);
+  --cco-space-component-lg: var(--cco-space-6);
+  --cco-space-section: var(--cco-space-8);
+  --cco-space-page-x: var(--cco-space-4);
+  --cco-space-page-y: var(--cco-space-6);
+  --cco-font-body: var(--font-sans);
+  --cco-font-code: var(--font-mono);
+}
+
+/* Component tokens: named dimensions for the shared shadcn-compatible UI. */
+:root {
+  --cco-button-height: 2.5rem;
+  --cco-button-height-sm: 2rem;
+  --cco-button-height-lg: 3rem;
+  --cco-button-icon-size: 2.5rem;
+  --cco-button-padding-x: var(--cco-space-4);
+  --cco-button-padding-x-sm: var(--cco-space-3);
+  --cco-button-padding-x-lg: var(--cco-space-6);
+  --cco-button-padding-y: var(--cco-space-2);
+  --cco-button-radius: var(--radius-md);
+
+  --cco-input-height: 2.5rem;
+  --cco-input-padding-x: var(--cco-space-3);
+  --cco-input-padding-y: var(--cco-space-2);
+  --cco-input-radius: var(--radius-md);
+
+  --cco-card-padding: var(--cco-space-6);
+  --cco-card-padding-sm: var(--cco-space-4);
+  --cco-card-radius: var(--radius-lg);
+  --cco-card-shadow: 0 1px 2px color-mix(in srgb, var(--foreground) 5%, transparent);
+}
+
+/* Tailwind v4 aliases for shadcn-compatible semantic utilities. */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --spacing-component-xs: var(--cco-space-component-xs);
+  --spacing-component-sm: var(--cco-space-component-sm);
+  --spacing-component: var(--cco-space-component);
+  --spacing-component-lg: var(--cco-space-component-lg);
+  --spacing-section: var(--cco-space-section);
+  --spacing-page-x: var(--cco-space-page-x);
+  --spacing-page-y: var(--cco-space-page-y);
+  --font-body: var(--cco-font-body);
+  --font-code: var(--cco-font-code);
+}

@@ -1,0 +1,8 @@
+{
+  "title": "文章",
+  "description": "一些废文。",
+  "root": true,
+  "pageTitles": {
+    "index": "文章总览"
+  }
+}

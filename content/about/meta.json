@@ -1,0 +1,6 @@
+{
+  "title": "關於",
+  "description": "CCO Toolkit 網站簡介、投稿入口與最新更新。",
+  "root": true,
+  "pages": ["privacy", "licensing", "changelog", "contribution-board", "contributing"]
+}

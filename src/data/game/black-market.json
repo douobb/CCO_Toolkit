@@ -1,0 +1,36 @@
+{
+  "qualities": [
+    {
+      "id": "trash",
+      "labels": { "zh-tw": "廢棄", "zh-cn": "废弃", "en": "Trash" },
+      "saleMultiplier": 0.7,
+      "verification": "confirmed"
+    },
+    {
+      "id": "common",
+      "labels": { "zh-tw": "普通", "zh-cn": "普通", "en": "Common" },
+      "saleMultiplier": 0.8,
+      "verification": "confirmed"
+    },
+    {
+      "id": "high-quality",
+      "labels": { "zh-tw": "高級", "zh-cn": "高级", "en": "High Quality" },
+      "saleMultiplier": 1,
+      "verification": "confirmed"
+    },
+    {
+      "id": "rare",
+      "labels": { "zh-tw": "稀有", "zh-cn": "稀有", "en": "Rare" },
+      "saleMultiplier": 1.2,
+      "verification": "confirmed"
+    }
+  ],
+  "levelRange": { "min": 1, "max": 800, "step": 1 },
+  "saleFormula": {
+    "formulaId": "printing-level-cache-sale",
+    "levelMultiplier": 1,
+    "levelOffset": 100,
+    "rounding": "ceil"
+  },
+  "resultDecimalPlaces": 2
+}

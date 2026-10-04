@@ -1,0 +1,166 @@
+{
+  "activities": [
+    {
+      "id": "search",
+      "labels": { "zh-tw": "搜索", "zh-cn": "搜刮", "en": "Scavenging" },
+      "kind": "search",
+      "batchSize": 12,
+      "baseUnitSeconds": 900,
+      "verification": "confirmed"
+    },
+    {
+      "id": "black-market-trash",
+      "labels": { "zh-tw": "黑市・廢棄快取", "zh-cn": "黑市・废弃图纸", "en": "Black Market · Trash Cache" },
+      "kind": "black-market",
+      "quality": "trash",
+      "batchSize": 1000,
+      "baseUnitSeconds": 7,
+      "verification": "confirmed"
+    },
+    {
+      "id": "black-market-common",
+      "labels": { "zh-tw": "黑市・普通快取", "zh-cn": "黑市・普通图纸", "en": "Black Market · Common Cache" },
+      "kind": "black-market",
+      "quality": "common",
+      "batchSize": 1000,
+      "baseUnitSeconds": 7,
+      "verification": "confirmed"
+    },
+    {
+      "id": "black-market-high-quality",
+      "labels": { "zh-tw": "黑市・高級快取", "zh-cn": "黑市・高级图纸", "en": "Black Market · High Quality Cache" },
+      "kind": "black-market",
+      "quality": "high-quality",
+      "batchSize": 1000,
+      "baseUnitSeconds": 7,
+      "verification": "confirmed"
+    },
+    {
+      "id": "black-market-rare",
+      "labels": { "zh-tw": "黑市・稀有快取", "zh-cn": "黑市・稀有图纸", "en": "Black Market · Rare Cache" },
+      "kind": "black-market",
+      "quality": "rare",
+      "batchSize": 1000,
+      "baseUnitSeconds": 7,
+      "verification": "confirmed"
+    },
+    {
+      "id": "mining",
+      "labels": { "zh-tw": "挖礦", "zh-cn": "采矿", "en": "Mining" },
+      "kind": "mining",
+      "batchSize": 8,
+      "baseUnitSeconds": 900,
+      "verification": "confirmed"
+    },
+    {
+      "id": "ai-crafting",
+      "labels": { "zh-tw": "AI 製作", "zh-cn": "AI 制作", "en": "AI Crafting" },
+      "kind": "ai-crafting",
+      "batchSize": 100,
+      "baseUnitSeconds": 300,
+      "verification": "confirmed"
+    },
+    {
+      "id": "white-box",
+      "labels": { "zh-tw": "開箱・白箱", "zh-cn": "开箱・白箱", "en": "Opening · White Box" },
+      "kind": "loot-box",
+      "boxType": "white",
+      "batchSize": 12,
+      "baseUnitSeconds": 600,
+      "verification": "confirmed"
+    },
+    {
+      "id": "yellow-box",
+      "labels": { "zh-tw": "開箱・黃箱", "zh-cn": "开箱・黄箱", "en": "Opening · Yellow Box" },
+      "kind": "loot-box",
+      "boxType": "yellow",
+      "batchSize": 8,
+      "baseUnitSeconds": 900,
+      "verification": "confirmed"
+    },
+    {
+      "id": "crush-medical",
+      "labels": { "zh-tw": "壓碎・醫療科技零件", "zh-cn": "压碎・医疗科技零件", "en": "Crushing · Medical Tech Parts" },
+      "kind": "crush",
+      "inputItemId": "medical-tech-parts",
+      "inputQuantity": 1,
+      "outputItemId": "tech-scrap",
+      "outputQuantity": 1.2,
+      "batchSize": 1000,
+      "baseUnitSeconds": 16,
+      "verification": "confirmed"
+    },
+    {
+      "id": "crush-ammunition",
+      "labels": { "zh-tw": "壓碎・彈藥零件", "zh-cn": "压碎・弹药零件", "en": "Crushing · Ammunition Tech Parts" },
+      "kind": "crush",
+      "inputItemId": "ammunition-tech-parts",
+      "inputQuantity": 1,
+      "outputItemId": "tech-scrap",
+      "outputQuantity": 1.2,
+      "batchSize": 1000,
+      "baseUnitSeconds": 4,
+      "verification": "confirmed"
+    },
+    {
+      "id": "crush-military-ammunition",
+      "labels": { "zh-tw": "壓碎・軍用彈藥零件", "zh-cn": "压碎・军用弹药零件", "en": "Crushing · Military Ammunition Tech Parts" },
+      "kind": "crush",
+      "inputItemId": "military-ammunition-tech-parts",
+      "inputQuantity": 1,
+      "outputItemId": "tech-scrap",
+      "outputQuantity": 1.2,
+      "batchSize": 1000,
+      "baseUnitSeconds": 16,
+      "verification": "confirmed"
+    },
+    {
+      "id": "pack-old-pouch",
+      "labels": { "zh-tw": "製作・老舊袋子", "zh-cn": "制作・老旧袋子", "en": "Packing · Old Pouch" },
+      "kind": "pack",
+      "inputItemId": "tech-scrap",
+      "inputQuantity": 100,
+      "outputItemId": "old-pouch",
+      "outputQuantity": 1,
+      "batchSize": 24,
+      "baseUnitSeconds": 300,
+      "verification": "confirmed"
+    },
+    {
+      "id": "pack-fanny-pack",
+      "labels": { "zh-tw": "製作・腰包", "zh-cn": "制作・腰包", "en": "Packing · Fanny Pack" },
+      "kind": "pack",
+      "inputItemId": "old-pouch",
+      "inputQuantity": 10,
+      "outputItemId": "fanny-pack",
+      "outputQuantity": 1,
+      "batchSize": 24,
+      "baseUnitSeconds": 900,
+      "verification": "confirmed"
+    },
+    {
+      "id": "pack-explorer-backpack",
+      "labels": { "zh-tw": "製作・探險家背包", "zh-cn": "制作・探险家背包", "en": "Packing · Explorer's Backpack" },
+      "kind": "pack",
+      "inputItemId": "fanny-pack",
+      "inputQuantity": 15,
+      "outputItemId": "explorer-backpack",
+      "outputQuantity": 1,
+      "batchSize": 24,
+      "baseUnitSeconds": 1800,
+      "verification": "confirmed"
+    },
+    {
+      "id": "pack-employee-office-case",
+      "labels": { "zh-tw": "製作・公事包", "zh-cn": "制作・办公手提箱", "en": "Packing · Employee Office Case" },
+      "kind": "pack",
+      "inputItemId": "explorer-backpack",
+      "inputQuantity": 20,
+      "outputItemId": "employee-office-case",
+      "outputQuantity": 1,
+      "batchSize": 24,
+      "baseUnitSeconds": 2700,
+      "verification": "confirmed"
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "title": "教程",
+  "description": "CyberCode Online 的入门与进阶教程。",
+  "root": true,
+  "pagesIndex": "index",
+  "pages": [
+    "---入门---",
+    "new-player",
+    "gang",
+    "cache-and-equipment",
+    "resources",
+    "trading",
+    "faq",
+    "---进阶---",
+    "advanced-features",
+    "dungeon-loadout",
+    "buffs-and-items",
+    "formulas"
+  ],
+  "pageTitles": {
+    "index": "教程总览",
+    "new-player": "新手入门",
+    "gang": "公会功能",
+    "cache-and-equipment": "图纸与装备",
+    "resources": "获取资源",
+    "trading": "交易指南",
+    "faq": "常见问题",
+    "advanced-features": "进阶功能",
+    "dungeon-loadout": "地下城配装",
+    "buffs-and-items": "Buff 与物品总览",
+    "formulas": "公式总览"
+  }
+}

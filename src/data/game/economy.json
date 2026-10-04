@@ -1,0 +1,229 @@
+{
+  "currencies": [
+    {
+      "id": "ai",
+      "code": "AI",
+      "labels": { "zh-tw": "AI", "zh-cn": "AI", "en": "AI" },
+      "verification": "confirmed"
+    },
+    {
+      "id": "btc",
+      "code": "BTC",
+      "labels": { "zh-tw": "BTC", "zh-cn": "BTC", "en": "BTC" },
+      "verification": "confirmed"
+    }
+  ],
+  "items": [
+    {
+      "id": "tech-scrap",
+      "category": "material",
+      "labels": { "zh-tw": "科技碎片", "zh-cn": "科技碎片", "en": "Tech Scrap" },
+      "verification": "confirmed"
+    },
+    {
+      "id": "medical-tech-parts",
+      "category": "material",
+      "labels": { "zh-tw": "醫療科技零件", "zh-cn": "医疗科技零件", "en": "Medical Tech Parts" },
+      "verification": "confirmed"
+    },
+    {
+      "id": "ammunition-tech-parts",
+      "category": "material",
+      "labels": { "zh-tw": "彈藥零件", "zh-cn": "弹药零件", "en": "Ammunition Tech Parts" },
+      "verification": "confirmed"
+    },
+    {
+      "id": "military-ammunition-tech-parts",
+      "category": "material",
+      "labels": { "zh-tw": "軍用彈藥零件", "zh-cn": "军用弹药零件", "en": "Military Ammunition Tech Parts" },
+      "verification": "confirmed"
+    },
+    {
+      "id": "hash",
+      "category": "resource",
+      "labels": { "zh-tw": "雜湊處理器", "zh-cn": "哈希处理器", "en": "Hash Processor" },
+      "verification": "confirmed"
+    },
+    {
+      "id": "locked-container",
+      "category": "container",
+      "labels": { "zh-tw": "加密容器", "zh-cn": "加密容器", "en": "Locked Container" },
+      "verification": "confirmed"
+    },
+    {
+      "id": "locked-rare-container",
+      "category": "container",
+      "labels": { "zh-tw": "稀有加密容器", "zh-cn": "稀有加密容器", "en": "Locked Rare Container" },
+      "verification": "confirmed"
+    },
+    {
+      "id": "locked-legendary-container",
+      "category": "container",
+      "labels": { "zh-tw": "傳奇加密容器", "zh-cn": "传奇加密容器", "en": "Locked Legendary Container" },
+      "verification": "confirmed"
+    },
+    {
+      "id": "supply-crate-gang",
+      "category": "container",
+      "labels": { "zh-tw": "補給箱[公會]", "zh-cn": "补给箱[帮派]", "en": "Supply Crate [Gang]" },
+      "verification": "confirmed"
+    },
+    {
+      "id": "old-pouch",
+      "category": "backpack",
+      "labels": { "zh-tw": "老舊袋子", "zh-cn": "老旧袋子", "en": "Old Pouch" },
+      "verification": "confirmed"
+    },
+    {
+      "id": "fanny-pack",
+      "category": "backpack",
+      "labels": { "zh-tw": "腰包", "zh-cn": "腰包", "en": "Fanny Pack" },
+      "verification": "confirmed"
+    },
+    {
+      "id": "explorer-backpack",
+      "category": "backpack",
+      "labels": { "zh-tw": "探險家背包", "zh-cn": "探险家背包", "en": "Explorer's Backpack" },
+      "verification": "confirmed"
+    },
+    {
+      "id": "employee-office-case",
+      "category": "backpack",
+      "labels": { "zh-tw": "公事包", "zh-cn": "办公手提箱", "en": "Employee Office Case" },
+      "verification": "confirmed"
+    }
+  ],
+  "prices": [
+    {
+      "itemId": "tech-scrap",
+      "unit": "AI/k",
+      "defaultBasisCurrencyId": "ai",
+      "defaultBasisValue": 110,
+      "verification": "confirmed"
+    },
+    {
+      "itemId": "medical-tech-parts",
+      "unit": "AI/k",
+      "defaultBasisCurrencyId": "ai",
+      "defaultBasisValue": 50,
+      "verification": "confirmed"
+    },
+    {
+      "itemId": "ammunition-tech-parts",
+      "unit": "AI/k",
+      "defaultBasisCurrencyId": "ai",
+      "defaultBasisValue": 100,
+      "verification": "confirmed"
+    },
+    {
+      "itemId": "military-ammunition-tech-parts",
+      "unit": "AI/k",
+      "defaultBasisCurrencyId": "ai",
+      "defaultBasisValue": 100,
+      "verification": "confirmed"
+    },
+    {
+      "itemId": "hash",
+      "unit": "AI/item",
+      "defaultBasisCurrencyId": "ai",
+      "defaultBasisValue": 1.85,
+      "verification": "confirmed"
+    },
+    {
+      "itemId": "locked-container",
+      "unit": "BTC/item",
+      "defaultBasisCurrencyId": "btc",
+      "defaultBasisValue": 3000,
+      "verification": "confirmed"
+    },
+    {
+      "itemId": "locked-rare-container",
+      "unit": "AI/item",
+      "defaultBasisCurrencyId": "ai",
+      "defaultBasisValue": 30,
+      "verification": "confirmed"
+    },
+    {
+      "itemId": "locked-legendary-container",
+      "unit": "AI/item",
+      "defaultBasisCurrencyId": "ai",
+      "defaultBasisValue": 400,
+      "verification": "confirmed"
+    },
+    {
+      "itemId": "supply-crate-gang",
+      "unit": "AI/item",
+      "defaultBasisCurrencyId": "ai",
+      "defaultBasisValue": 0.33,
+      "verification": "confirmed"
+    },
+    {
+      "itemId": "old-pouch",
+      "unit": "AI/item",
+      "defaultBasisCurrencyId": "ai",
+      "defaultBasisValue": 12.5,
+      "verification": "confirmed"
+    },
+    {
+      "itemId": "fanny-pack",
+      "unit": "AI/item",
+      "defaultBasisCurrencyId": "ai",
+      "defaultBasisValue": 130,
+      "verification": "confirmed"
+    },
+    {
+      "itemId": "explorer-backpack",
+      "unit": "AI/item",
+      "defaultBasisCurrencyId": "ai",
+      "defaultBasisValue": 2050,
+      "verification": "confirmed"
+    },
+    {
+      "itemId": "employee-office-case",
+      "unit": "AI/item",
+      "defaultBasisCurrencyId": "ai",
+      "defaultBasisValue": 41000,
+      "verification": "confirmed"
+    }
+  ],
+  "exchangeRates": [
+    {
+      "id": "btc-per-ai",
+      "baseCurrencyId": "ai",
+      "quoteCurrencyId": "btc",
+      "unit": "BTC/AI",
+      "defaultValue": 8150,
+      "verification": "confirmed"
+    }
+  ],
+  "cacheRates": [
+    {
+      "id": "trash",
+      "labels": { "zh-tw": "廢棄", "zh-cn": "废弃", "en": "Trash" },
+      "unit": "cache/AI",
+      "defaultValue": 9,
+      "verification": "confirmed"
+    },
+    {
+      "id": "common",
+      "labels": { "zh-tw": "普通", "zh-cn": "普通", "en": "Common" },
+      "unit": "cache/AI",
+      "defaultValue": 8,
+      "verification": "confirmed"
+    },
+    {
+      "id": "high-quality",
+      "labels": { "zh-tw": "高級", "zh-cn": "高级", "en": "High Quality" },
+      "unit": "cache/AI",
+      "defaultValue": 6,
+      "verification": "confirmed"
+    },
+    {
+      "id": "rare",
+      "labels": { "zh-tw": "稀有", "zh-cn": "稀有", "en": "Rare" },
+      "unit": "cache/AI",
+      "defaultValue": 3,
+      "verification": "confirmed"
+    }
+  ]
+}

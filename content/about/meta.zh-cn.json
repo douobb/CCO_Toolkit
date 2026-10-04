@@ -1,0 +1,20 @@
+{
+  "title": "关于",
+  "description": "CCO Toolkit 网站简介、投稿入口与最新更新。",
+  "root": true,
+  "pages": [
+    "privacy",
+    "licensing",
+    "changelog",
+    "contribution-board",
+    "contributing"
+  ],
+  "pageTitles": {
+    "index": "关于",
+    "privacy": "隐私说明",
+    "licensing": "授权与声明",
+    "changelog": "更新记录",
+    "contribution-board": "贡献看板",
+    "contributing": "贡献指南"
+  }
+}

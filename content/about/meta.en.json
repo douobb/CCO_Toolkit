@@ -1,0 +1,6 @@
+{
+  "title": "About",
+  "description": "About CCO Toolkit, contribution, privacy, licensing, and updates.",
+  "root": true,
+  "pages": ["privacy", "licensing", "changelog", "contribution-board", "contributing"]
+}

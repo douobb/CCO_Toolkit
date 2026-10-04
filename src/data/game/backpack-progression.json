@@ -1,0 +1,102 @@
+{
+  "tiers": [
+    {
+      "id": "old-pouch",
+      "labels": { "zh-tw": "老舊袋子", "zh-cn": "老旧袋子", "en": "Old Pouch" },
+      "requirements": [
+        { "itemId": "tech-scrap", "quantity": 100 }
+      ],
+      "verification": "confirmed"
+    },
+    {
+      "id": "fanny-pack",
+      "labels": { "zh-tw": "腰包", "zh-cn": "腰包", "en": "Fanny Pack" },
+      "requirements": [
+        { "itemId": "old-pouch", "quantity": 10 }
+      ],
+      "verification": "confirmed"
+    },
+    {
+      "id": "explorer-backpack",
+      "labels": { "zh-tw": "探險家背包", "zh-cn": "探险家背包", "en": "Explorer's Backpack" },
+      "requirements": [
+        { "itemId": "fanny-pack", "quantity": 15 }
+      ],
+      "verification": "confirmed"
+    },
+    {
+      "id": "employee-office-case",
+      "labels": { "zh-tw": "公事包", "zh-cn": "办公手提箱", "en": "Employee Office Case" },
+      "requirements": [
+        { "itemId": "explorer-backpack", "quantity": 20 }
+      ],
+      "verification": "confirmed"
+    },
+    {
+      "id": "autonomous-storage-unit",
+      "labels": { "zh-tw": "自主儲存單位", "zh-cn": "自主存储单位", "en": "Autonomous Storage Unit" },
+      "requirements": [
+        { "itemId": "employee-office-case", "quantity": 25 }
+      ],
+      "verification": "confirmed"
+    },
+    {
+      "id": "quantum-storage-unit",
+      "labels": { "zh-tw": "量子儲存單位", "zh-cn": "量子存储单位", "en": "Quantum Storage Unit" },
+      "requirements": [
+        { "itemId": "autonomous-storage-unit", "quantity": 15 }
+      ],
+      "verification": "confirmed"
+    }
+  ],
+  "materials": [
+    {
+      "id": "tech-scrap",
+      "labels": { "zh-tw": "科技碎片", "zh-cn": "科技碎片", "en": "Tech Scrap" },
+      "techScrapEquivalent": 1,
+      "verification": "confirmed"
+    },
+    {
+      "id": "tech-scrap-cluster",
+      "labels": { "zh-tw": "科技集群", "zh-cn": "科技集群", "en": "Tech Scrap Cluster" },
+      "techScrapEquivalent": 1000,
+      "verification": "confirmed"
+    },
+    {
+      "id": "medical-tech-parts",
+      "labels": { "zh-tw": "醫療科技零件", "zh-cn": "医疗科技零件", "en": "Medical Tech Parts" },
+      "techScrapEquivalent": 1.2,
+      "verification": "confirmed"
+    },
+    {
+      "id": "medical-tech-cluster",
+      "labels": { "zh-tw": "醫療科技集群", "zh-cn": "医疗科技集群", "en": "Medical Tech Cluster" },
+      "techScrapEquivalent": 1200,
+      "verification": "confirmed"
+    },
+    {
+      "id": "military-ammunition-tech-parts",
+      "labels": { "zh-tw": "軍用彈藥零件", "zh-cn": "军用弹药零件", "en": "Military Ammunition Tech Parts" },
+      "techScrapEquivalent": 1.2,
+      "verification": "confirmed"
+    },
+    {
+      "id": "military-ammunition-tech-parts-cluster",
+      "labels": { "zh-tw": "軍用彈藥集群", "zh-cn": "军火科技部件集合", "en": "Military Ammunition Tech Parts Cluster" },
+      "techScrapEquivalent": 1200,
+      "verification": "confirmed"
+    },
+    {
+      "id": "ammunition-tech-parts",
+      "labels": { "zh-tw": "彈藥零件", "zh-cn": "弹药零件", "en": "Ammunition Tech Parts" },
+      "techScrapEquivalent": 1.2,
+      "verification": "confirmed"
+    },
+    {
+      "id": "ammunition-tech-parts-cluster",
+      "labels": { "zh-tw": "彈藥集群", "zh-cn": "弹药零件组", "en": "Ammunition Tech Parts Cluster" },
+      "techScrapEquivalent": 1200,
+      "verification": "confirmed"
+    }
+  ]
+}

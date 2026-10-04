@@ -1,0 +1,18 @@
+{
+  "format": "cco-player-data",
+  "formatVersion": 1,
+  "exportedAt": "2026-08-30T00:00:00.000Z",
+  "producer": {
+    "app": "future-tool",
+    "appVersion": "1.0.0"
+  },
+  "sections": [
+    {
+      "id": "future-player-history",
+      "schemaVersion": 1,
+      "data": {
+        "entries": []
+      }
+    }
+  ]
+}

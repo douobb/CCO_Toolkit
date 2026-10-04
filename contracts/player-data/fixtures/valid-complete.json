@@ -1,0 +1,80 @@
+{
+  "format": "cco-player-data",
+  "formatVersion": 1,
+  "exportedAt": "2026-08-30T00:00:00.000Z",
+  "producer": {
+    "app": "cco-toolkit",
+    "appVersion": "0.1.0"
+  },
+  "sections": [
+    {
+      "id": "progression",
+      "schemaVersion": 1,
+      "data": {
+        "levels": [
+          { "id": "level", "value": 500 },
+          { "id": "printing-rank", "value": 400 },
+          { "id": "medical-science", "value": 300 },
+          { "id": "ammo-crafting", "value": 200 },
+          { "id": "scavenge-skill", "value": 341 },
+          { "id": "mining-skill", "value": 250 }
+        ]
+      }
+    },
+    {
+      "id": "player-attributes",
+      "schemaVersion": 1,
+      "data": {
+        "values": [
+          { "id": "max-health", "value": 1000 },
+          { "id": "armor", "value": 500 },
+          { "id": "destructive-weapon-damage", "value": 250 },
+          { "id": "critical-damage-percent", "value": 220 },
+          { "id": "bargain-percent", "value": 40 },
+          { "id": "damage-reduction-percent", "value": 25 }
+        ]
+      }
+    },
+    {
+      "id": "inventory",
+      "schemaVersion": 1,
+      "data": {
+        "completeness": "manual",
+        "items": [
+          { "itemId": "old-pouch", "quantity": 2 },
+          { "itemId": "tech-scrap", "quantity": 1200 }
+        ]
+      }
+    },
+    {
+      "id": "loot-box-history",
+      "schemaVersion": 1,
+      "data": {
+        "records": [
+          {
+            "id": "toolkit-record-20260830-1",
+            "recordedAt": "2026-08-30T00:00:00.000Z",
+            "boxType": "white",
+            "openings": 12,
+            "drops": [
+              { "dropId": "item-hash", "quantity": 192 },
+              { "dropId": "equipment-yellow", "quantity": 1 }
+            ]
+          }
+        ],
+        "rollups": [
+          {
+            "id": "toolkit-rollup-202608",
+            "boxType": "yellow",
+            "recordCount": 2,
+            "openings": 16,
+            "drops": [
+              { "dropId": "item-hash", "quantity": 1024 },
+              { "dropId": "item-old-pouch", "quantity": 2 }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "title": "教學",
+  "description": "CyberCode Online 的入門與進階教學。",
+  "root": true,
+  "pagesIndex": "index",
+  "pages": [
+    "---入門---",
+    "new-player",
+    "gang",
+    "cache-and-equipment",
+    "resources",
+    "trading",
+    "faq",
+    "---進階---",
+    "advanced-features",
+    "dungeon-loadout",
+    "buffs-and-items",
+    "formulas"
+  ]
+}
