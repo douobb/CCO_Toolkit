@@ -579,7 +579,7 @@ function RecommendationCards({
                   <div className="relative aspect-[16/9] overflow-hidden border-b bg-fd-accent">
                     {site.imageUrl ? (
                       <Image
-                        src={site.imageUrl}
+                        src={withBasePath(site.imageUrl)}
                         alt={site.imageAlt ?? name}
                         width={1200}
                         height={675}

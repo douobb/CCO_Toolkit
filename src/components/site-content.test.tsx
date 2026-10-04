@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   getPublicContributorGroups,
@@ -307,6 +307,33 @@ describe('Contributors', () => {
 });
 
 describe('Recommendation grids', () => {
+  it('依部署前綴產生 Discord 圖片 src，根部署維持原路徑', async () => {
+    const discordImagePath = '/images/recommendations/websites/discord/logo.svg';
+
+    try {
+      vi.stubEnv('NEXT_PUBLIC_BASE_PATH', '/CCO_Toolkit');
+      vi.resetModules();
+
+      const { renderToStaticMarkup: renderWithBasePath } = await import('react-dom/server');
+      const { RecommendationsGrid: BasePathRecommendationsGrid } = await import('./site-content');
+      const basePathMarkup = renderWithBasePath(
+        <BasePathRecommendationsGrid locale="zh-tw" />,
+      );
+      expect(basePathMarkup).toContain(`src="/CCO_Toolkit${discordImagePath}"`);
+
+      vi.stubEnv('NEXT_PUBLIC_BASE_PATH', '');
+      vi.resetModules();
+
+      const { renderToStaticMarkup: renderAtRoot } = await import('react-dom/server');
+      const { RecommendationsGrid: RootRecommendationsGrid } = await import('./site-content');
+      const rootMarkup = renderAtRoot(<RootRecommendationsGrid locale="zh-tw" />);
+      expect(rootMarkup).toContain(`src="${discordImagePath}"`);
+    } finally {
+      vi.unstubAllEnvs();
+      vi.resetModules();
+    }
+  });
+
   it('顯示網站推薦、可選備註與無封面佔位，並保留外部連結行為', () => {
     const markup = renderToStaticMarkup(<RecommendationsGrid locale="zh-tw" />);
 
