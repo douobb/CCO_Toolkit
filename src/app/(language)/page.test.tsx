@@ -104,13 +104,22 @@ describe('root language route', () => {
     expect(rootOptions).toEqual({ ...baseOptions(defaultLocale), id: 'main-content' });
     expect(rootOptions).toEqual(localizedOptions);
     expect(rootOptions.nav).toMatchObject({ title: 'CCO Toolkit', url: '/zh-tw' });
-    expect(rootOptions.links).toEqual([
+    const navigationLinks: { text: ReactNode; url: string; active: string; icon: ReactNode }[] = rootOptions.links;
+    expect(navigationLinks.map(({ text, url, active }) => ({ text, url, active }))).toEqual([
       { text: '工具', url: '/zh-tw/tools', active: 'nested-url' },
       { text: '教學', url: '/zh-tw/guides', active: 'nested-url' },
       { text: '文章', url: '/zh-tw/blog', active: 'nested-url' },
       { text: '推薦', url: '/zh-tw/recommendations', active: 'nested-url' },
       { text: '關於', url: '/zh-tw/about', active: 'nested-url' },
     ]);
+    const iconClasses = ['lucide-calculator', 'lucide-book-open', 'lucide-file-text', 'lucide-star', 'lucide-info'];
+    navigationLinks.forEach((link, index) => {
+      const iconMarkup = renderToStaticMarkup(link.icon);
+      expect(iconMarkup).toContain('<svg');
+      expect(iconMarkup).toContain(iconClasses[index]);
+      expect(iconMarkup).toContain('aria-hidden="true"');
+      expect(iconMarkup).toContain('translate-y-px');
+    });
     expect(rootChildren.props.locale).toBe(defaultLocale);
   });
 
