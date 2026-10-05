@@ -931,7 +931,7 @@ export function SearchRewardChart({
 
               <p
                 id="search-reward-chart-interaction-hint"
-                className="mt-5 rounded-md border border-border bg-muted/40 p-3 text-sm leading-6 text-muted-foreground"
+                className="sr-only"
               >
                 {labels.chartInteractionHint}
               </p>

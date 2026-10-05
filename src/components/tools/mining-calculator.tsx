@@ -8,7 +8,7 @@ import {
   useMemo,
   useState,
 } from 'react';
-import { Download, RotateCcw } from 'lucide-react';
+import { ArrowLeftRight, Download, RotateCcw } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import type { ContextualDocsPageProps } from '@/components/context';
@@ -26,6 +26,7 @@ import {
   ToolState,
   ToolValidationSummary,
 } from '@/components/tools';
+import { Button } from '@/components/ui/button';
 import {
   Card,
   CardContent,
@@ -33,7 +34,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { economyDataSet, getMarketPriceDefinition, type MarketPriceItemId } from '@/data/game/economy';
-import { getProgressionLevelDefinition } from '@/data/game/progression';
+import { getProgressionLevelDefinition, getProgressionMethods } from '@/data/game/progression';
 import {
   calculateMining,
   MINING_LEVEL_MAX,
@@ -98,6 +99,10 @@ export interface MiningToolLabels {
   readonly aiDescription: string;
   readonly currentLevel: string;
   readonly netProfit: string;
+  readonly perMinute: string;
+  readonly btcPerMinuteUnit: string;
+  readonly aiPerMinuteUnit: string;
+  readonly switchNetProfitUnit: string;
   readonly btcUnit: string;
   readonly aiUnit: string;
   readonly breakdown: string;
@@ -768,6 +773,130 @@ function formatBreakEven(
   });
 }
 
+type MiningCurrency = 'BTC' | 'AI';
+
+const miningUnitMinutes = getProgressionMethods('mining-skill')
+  .find((method) => method.id === 'mining')?.unitMinutes;
+const aiCraftingUnitMinutes = getProgressionMethods('mining-skill')
+  .find((method) => method.id === 'ai-crafting')?.unitMinutes;
+
+function calculateMiningProfitPerMinute(
+  profit: number,
+  unitMinutes: number | null | undefined,
+  groupsPerAction = 1,
+): number | null {
+  if (
+    !Number.isFinite(profit)
+    || typeof unitMinutes !== 'number'
+    || unitMinutes <= 0
+    || !Number.isFinite(groupsPerAction)
+    || groupsPerAction <= 0
+  ) {
+    return null;
+  }
+
+  const profitPerMinute = profit / groupsPerAction / unitMinutes;
+  return Number.isFinite(profitPerMinute) ? profitPerMinute : null;
+}
+
+function convertMiningProfit(
+  profit: number | null,
+  baseCurrency: MiningCurrency,
+  currency: MiningCurrency,
+  btcPerAi: number | undefined,
+): number | null {
+  if (profit === null || !Number.isFinite(profit)) return null;
+  if (currency === baseCurrency) return profit;
+
+  const conversionRate = typeof btcPerAi === 'number' && Number.isFinite(btcPerAi) && btcPerAi > 0
+    ? btcPerAi
+    : null;
+  if (conversionRate === null) return null;
+
+  const convertedProfit = currency === 'AI'
+    ? profit / conversionRate
+    : profit * conversionRate;
+  return Number.isFinite(convertedProfit) ? convertedProfit : null;
+}
+
+function MiningNetProfitSummary({
+  labels,
+  sectionTitle,
+  cardId,
+  currentLevel,
+  profit,
+  baseCurrency,
+  currency,
+  onToggleCurrency,
+  btcPerAi,
+  formatNumber,
+}: {
+  labels: MiningToolLabels;
+  sectionTitle: string;
+  cardId: 'btc' | 'ai';
+  currentLevel: string;
+  profit: number;
+  baseCurrency: MiningCurrency;
+  currency: MiningCurrency;
+  onToggleCurrency: () => void;
+  btcPerAi: number | undefined;
+  formatNumber: NumberFormatter;
+}) {
+  const amount = convertMiningProfit(profit, baseCurrency, currency, btcPerAi);
+  const nextCurrency = currency === 'BTC' ? 'AI' : 'BTC';
+  const unit = currency === 'BTC' ? labels.btcUnit : labels.aiUnit;
+  const switchLabel = formatTemplate(labels.switchNetProfitUnit, {
+    section: sectionTitle,
+    unit: currency,
+    nextUnit: nextCurrency,
+  });
+
+  return (
+    <div className="rounded-[var(--cco-card-radius)] border border-border bg-muted/40 p-5">
+      <div className="flex min-w-0 items-start justify-between gap-2">
+        <p className="min-w-0 flex-1 break-words text-sm font-medium text-muted-foreground [overflow-wrap:anywhere]">
+          {currentLevel}
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="min-h-11 min-w-11 shrink-0 px-3 text-xs font-semibold tracking-wide focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          aria-label={switchLabel}
+          title={switchLabel}
+          data-testid={`mining-net-profit-toggle-${cardId}`}
+          onClick={onToggleCurrency}
+        >
+          <ArrowLeftRight aria-hidden="true" />
+        </Button>
+      </div>
+      <p className="mt-3 text-xs text-muted-foreground">{labels.netProfit}</p>
+      <p
+        className={cn(
+          'mt-2 flex min-w-0 flex-wrap items-baseline gap-x-2 break-words text-3xl font-semibold tracking-tight',
+          amount !== null && amount < 0 ? 'text-destructive' : 'text-foreground',
+        )}
+        data-testid={`mining-net-profit-value-${cardId}`}
+      >
+        <span
+          className="min-w-0 [overflow-wrap:anywhere]"
+          data-testid={`mining-net-profit-amount-${cardId}`}
+        >
+          {amount === null ? labels.notAvailable : formatAmount(formatNumber, amount)}
+        </span>
+        {amount !== null ? (
+          <span
+            className="whitespace-nowrap text-sm font-medium text-muted-foreground"
+            data-testid={`mining-net-profit-unit-${cardId}`}
+          >
+            {unit}
+          </span>
+        ) : null}
+      </p>
+    </div>
+  );
+}
+
 function EmptyMiningResult({
   labels,
   hasErrors,
@@ -789,18 +918,26 @@ function MiningBtcResultCard({
   result,
   hasErrors,
   formatNumber,
+  btcPerAi,
 }: {
   labels: MiningToolLabels;
   result: MiningBtcResult | undefined;
   hasErrors: boolean;
   formatNumber: NumberFormatter;
+  btcPerAi: number | undefined;
 }) {
+  const [currency, setCurrency] = useState<MiningCurrency>('BTC');
+  const profitPerMinute = result
+    ? calculateMiningProfitPerMinute(result.profitBtc, miningUnitMinutes)
+    : null;
+  const displayProfitPerMinute = convertMiningProfit(profitPerMinute, 'BTC', currency, btcPerAi);
+  const perMinuteUnit = currency === 'BTC' ? labels.btcPerMinuteUnit : labels.aiPerMinuteUnit;
+
   return (
     <ToolResultCard
       titleId="mining-btc-result-title"
       title={labels.btcTitle}
       titleClassName="site-tool-section-heading"
-      description={labels.btcDescription}
       className="h-full"
       validation={
         hasErrors ? (
@@ -810,23 +947,18 @@ function MiningBtcResultCard({
     >
       {result ? (
         <div className="space-y-6">
-          <div className="rounded-[var(--cco-card-radius)] border border-border bg-muted/40 p-5">
-            <p className="text-sm font-medium text-muted-foreground">
-              {formatTemplate(labels.currentLevel, { level: result.miningLevel })}
-            </p>
-            <p className="mt-3 text-xs text-muted-foreground">{labels.netProfit}</p>
-            <p
-              className={cn(
-                'mt-2 text-3xl font-semibold tracking-tight',
-                result.profitBtc < 0 ? 'text-destructive' : 'text-foreground',
-              )}
-            >
-              {formatAmount(formatNumber, result.profitBtc)}
-              <span className="ml-2 text-sm font-medium text-muted-foreground">
-                {labels.btcUnit}
-              </span>
-            </p>
-          </div>
+          <MiningNetProfitSummary
+            labels={labels}
+            sectionTitle={labels.btcTitle}
+            cardId="btc"
+            currentLevel={formatTemplate(labels.currentLevel, { level: result.miningLevel })}
+            profit={result.profitBtc}
+            baseCurrency="BTC"
+            currency={currency}
+            onToggleCurrency={() => setCurrency((current) => current === 'BTC' ? 'AI' : 'BTC')}
+            btcPerAi={btcPerAi}
+            formatNumber={formatNumber}
+          />
           <ToolBreakdown
             title={labels.breakdown}
             titleId="mining-btc-breakdown-title"
@@ -836,6 +968,17 @@ function MiningBtcResultCard({
                 id: 'btc-output',
                 label: labels.btcOutput,
                 value: formatAmount(formatNumber, result.miningBtcPerAction) + ' ' + labels.btcUnit,
+              },
+              {
+                id: 'per-minute',
+                label: labels.perMinute,
+                value: displayProfitPerMinute === null
+                  ? labels.notAvailable
+                  : (
+                    <span data-testid="mining-per-minute-value-btc">
+                      {formatAmount(formatNumber, displayProfitPerMinute)} {perMinuteUnit}
+                    </span>
+                  ),
               },
               {
                 id: 'roi',
@@ -878,18 +1021,30 @@ function MiningAiResultCard({
   result,
   hasErrors,
   formatNumber,
+  btcPerAi,
 }: {
   labels: MiningToolLabels;
   result: AiCraftResult | undefined;
   hasErrors: boolean;
   formatNumber: NumberFormatter;
+  btcPerAi: number | undefined;
 }) {
+  const [currency, setCurrency] = useState<MiningCurrency>('AI');
+  const profitPerMinute = result
+    ? calculateMiningProfitPerMinute(
+      result.profitAi,
+      aiCraftingUnitMinutes,
+      result.groupsPerAction,
+    )
+    : null;
+  const displayProfitPerMinute = convertMiningProfit(profitPerMinute, 'AI', currency, btcPerAi);
+  const perMinuteUnit = currency === 'BTC' ? labels.btcPerMinuteUnit : labels.aiPerMinuteUnit;
+
   return (
     <ToolResultCard
       titleId="mining-ai-result-title"
       title={labels.aiTitle}
       titleClassName="site-tool-section-heading"
-      description={labels.aiDescription}
       className="h-full"
       validation={
         hasErrors ? (
@@ -899,23 +1054,18 @@ function MiningAiResultCard({
     >
       {result ? (
         <div className="space-y-6">
-          <div className="rounded-[var(--cco-card-radius)] border border-border bg-muted/40 p-5">
-            <p className="text-sm font-medium text-muted-foreground">
-              {formatTemplate(labels.currentLevel, { level: result.miningLevel })}
-            </p>
-            <p className="mt-3 text-xs text-muted-foreground">{labels.netProfit}</p>
-            <p
-              className={cn(
-                'mt-2 text-3xl font-semibold tracking-tight',
-                result.profitAi < 0 ? 'text-destructive' : 'text-foreground',
-              )}
-            >
-              {formatAmount(formatNumber, result.profitAi)}
-              <span className="ml-2 text-sm font-medium text-muted-foreground">
-                {labels.aiUnit}
-              </span>
-            </p>
-          </div>
+          <MiningNetProfitSummary
+            labels={labels}
+            sectionTitle={labels.aiTitle}
+            cardId="ai"
+            currentLevel={formatTemplate(labels.currentLevel, { level: result.miningLevel })}
+            profit={result.profitAi}
+            baseCurrency="AI"
+            currency={currency}
+            onToggleCurrency={() => setCurrency((current) => current === 'BTC' ? 'AI' : 'BTC')}
+            btcPerAi={btcPerAi}
+            formatNumber={formatNumber}
+          />
           <ToolBreakdown
             title={labels.breakdown}
             titleId="mining-ai-breakdown-title"
@@ -925,6 +1075,17 @@ function MiningAiResultCard({
                 id: 'ai-output',
                 label: labels.aiOutput,
                 value: formatNumber(result.aiPerAction) + ' ' + labels.aiUnit,
+              },
+              {
+                id: 'per-minute',
+                label: labels.perMinute,
+                value: displayProfitPerMinute === null
+                  ? labels.notAvailable
+                  : (
+                    <span data-testid="mining-per-minute-value-ai">
+                      {formatAmount(formatNumber, displayProfitPerMinute)} {perMinuteUnit}
+                    </span>
+                  ),
               },
               {
                 id: 'roi',
@@ -971,7 +1132,7 @@ export function MiningCalculator({
   locale: Locale;
   numberFormatter?: NumberFormatter;
 }) {
-  const { errors, result, fillFromShared } = useMiningTool();
+  const { errors, inputs, result, fillFromShared } = useMiningTool();
   const hasErrors = Object.keys(errors).length > 0;
   const formatNumber = useMemo(
     () => numberFormatter ?? createNumberFormatter(locale),
@@ -1032,12 +1193,14 @@ export function MiningCalculator({
             result={result?.btc}
             hasErrors={hasErrors}
             formatNumber={formatNumber}
+            btcPerAi={inputs?.btcPerAi}
           />
           <MiningAiResultCard
             labels={labels}
             result={result?.aiCraft}
             hasErrors={hasErrors}
             formatNumber={formatNumber}
+            btcPerAi={inputs?.btcPerAi}
           />
         </div>
       </div>

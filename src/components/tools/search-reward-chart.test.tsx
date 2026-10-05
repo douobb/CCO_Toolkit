@@ -196,6 +196,27 @@ describe('Search Reward chart UI', () => {
     expect(markup).toMatch(/d="M [^\"]+ L [^\"]+/);
   });
 
+  it('操作提示僅供螢幕閱讀器且圖表描述參照有效', () => {
+    const parsed = document.createElement('div');
+    parsed.innerHTML = renderChartMarkup();
+    const interactionHint = parsed.querySelector<HTMLElement>(
+      '#search-reward-chart-interaction-hint',
+    );
+    const chartSvg = parsed.querySelector('[data-chart-metric] svg');
+    const describedByIds = (chartSvg?.getAttribute('aria-describedby') ?? '')
+      .split(/\s+/)
+      .filter(Boolean);
+
+    expect(interactionHint?.className).toBe('sr-only');
+    expect(interactionHint?.textContent)
+      .toBe(getMessages('zh-tw').tools.searchReward.chartInteractionHint);
+    expect(describedByIds).toContain('search-reward-chart-interaction-hint');
+    expect(describedByIds.length).toBeGreaterThan(0);
+    for (const id of describedByIds) {
+      expect(parsed.querySelector(`[id="${id}"]`)).not.toBeNull();
+    }
+  });
+
   it('各語系的縱軸標籤都包含對應的批次單位', () => {
     const expectations = [
       {

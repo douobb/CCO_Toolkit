@@ -198,6 +198,32 @@ describe('Earnings trend chart', () => {
     expect(xTickLabels[xTickLabels.length - 1]?.getAttribute('text-anchor')).toBe('end');
   });
 
+  it('操作提示僅供螢幕閱讀器，群組小字已移除且圖表描述參照有效', () => {
+    const parsed = document.createElement('div');
+    parsed.innerHTML = renderToStaticMarkup(chart('per-minute'));
+    const interactionHint = parsed.querySelector<HTMLElement>(
+      '#earnings-chart-interaction-hint',
+    );
+    const chartSvg = parsed.querySelector('svg[tabindex="0"]');
+    const describedByIds = (chartSvg?.getAttribute('aria-describedby') ?? '')
+      .split(/\s+/)
+      .filter(Boolean);
+
+    expect(interactionHint?.className).toBe('sr-only');
+    expect(interactionHint?.textContent).toBe(labels.trendInteractionHint);
+    expect(Array.from(parsed.querySelectorAll('p'))
+      .some((paragraph) => paragraph.textContent?.trim() === labels.trendGroupHint))
+      .toBe(false);
+    expect(Array.from(parsed.querySelectorAll('p'))
+      .some((paragraph) => paragraph.textContent?.trim() === labels.trendDescription))
+      .toBe(false);
+    expect(describedByIds).toContain('earnings-chart-interaction-hint');
+    expect(describedByIds.length).toBeGreaterThan(0);
+    for (const id of describedByIds) {
+      expect(parsed.querySelector(`[id="${id}"]`)).not.toBeNull();
+    }
+  });
+
   it('切換兩個檢視、切換與重設系列，固定收益改用九列長條', async () => {
     const { container, root } = await renderChart();
     const labelsByGroup = {
@@ -290,8 +316,9 @@ describe('Earnings trend chart', () => {
       .toEqual(getFixedEarningsChartRows(deriveEarningsChartData(inputs, prices, 'per-minute'))
         .map((row) => row.activityId));
     expect(container.querySelectorAll('[data-earnings-chart-fixed-zero-axis]')).toHaveLength(9);
-    expect(container.querySelector('[data-earnings-chart-fixed-hint]')?.textContent)
-      .toContain(labels.trendFixedHint);
+    expect(container.querySelector('[data-earnings-chart-fixed="true"]')?.getAttribute('aria-label'))
+      .toBe(labels.trendFixedHint);
+    expect(container.querySelector('[data-earnings-chart-fixed-hint]')).toBeNull();
     expect(container.querySelector('[data-earnings-chart-details]')).toBeNull();
     expect(container.querySelector('[data-selected-level]')).toBeNull();
     expect(container.querySelector('[data-chart-scroll-container]')).toBeNull();

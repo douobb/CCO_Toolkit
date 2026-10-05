@@ -1,8 +1,13 @@
+// @vitest-environment happy-dom
+
+import { act } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { ReactNode } from 'react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import { SharedUserInputsProvider } from '@/components/shared-user-inputs';
+import { getProgressionMethods } from '@/data/game/progression';
 import { createSharedUserInputsStore, defaultSharedUserInputs } from '@/lib/storage';
 import { getMessages } from '@/lib/translations';
 
@@ -18,6 +23,30 @@ import {
   updateMiningSharedValue,
 } from './mining-calculator';
 
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+type MiningCardId = 'btc' | 'ai';
+
+interface MountedMining {
+  readonly container: HTMLDivElement;
+  readonly root: Root;
+  readonly store: ReturnType<typeof createSharedUserInputsStore>;
+}
+
+const mountedMinings: MountedMining[] = [];
+
+afterEach(async () => {
+  for (const mounted of mountedMinings.splice(0)) {
+    await act(async () => {
+      mounted.root.unmount();
+      await Promise.resolve();
+    });
+    mounted.store.dispose();
+    mounted.container.remove();
+  }
+  document.body.innerHTML = '';
+});
+
 function renderMining(children: ReactNode) {
   const store = createSharedUserInputsStore({ storage: null });
   const markup = renderToStaticMarkup(
@@ -27,6 +56,101 @@ function renderMining(children: ReactNode) {
   );
   store.dispose();
   return markup;
+}
+
+async function mountMiningCalculator() {
+  const container = document.createElement('div');
+  document.body.append(container);
+  const store = createSharedUserInputsStore({ storage: null });
+  const root = createRoot(container);
+  mountedMinings.push({ container, root, store });
+
+  await act(async () => {
+    root.render(
+      <SharedUserInputsProvider store={store}>
+        <MiningToolProvider>
+          <MiningCalculator labels={getMessages('en').tools.mining} locale="en" />
+        </MiningToolProvider>
+      </SharedUserInputsProvider>,
+    );
+    await Promise.resolve();
+  });
+
+  return { container };
+}
+
+function getToggle(container: HTMLElement, card: MiningCardId): HTMLButtonElement {
+  const button = container.querySelector<HTMLButtonElement>(
+    `[data-testid="mining-net-profit-toggle-${card}"]`,
+  );
+  if (!button) throw new Error(`找不到 ${card} 淨收益單位切換按鈕`);
+  return button;
+}
+
+function getNetProfitElement(
+  container: HTMLElement,
+  card: MiningCardId,
+  part: 'value' | 'amount' | 'unit',
+): HTMLElement {
+  const element = container.querySelector<HTMLElement>(
+    `[data-testid="mining-net-profit-${part}-${card}"]`,
+  );
+  if (!element) throw new Error(`找不到 ${card} 淨收益 ${part}`);
+  return element;
+}
+
+function readNetProfitAmount(container: HTMLElement, card: MiningCardId): number {
+  const amount = Number(getNetProfitElement(container, card, 'amount').textContent?.replace(/,/g, ''));
+  if (!Number.isFinite(amount)) throw new Error(`無法讀取 ${card} 淨收益金額`);
+  return amount;
+}
+
+function getPerMinuteElement(container: HTMLElement, card: MiningCardId): HTMLElement {
+  const element = container.querySelector<HTMLElement>(`[data-testid="mining-per-minute-value-${card}"]`);
+  if (!element) throw new Error(`找不到 ${card} 每分鐘收益`);
+  return element;
+}
+
+function readPerMinuteAmount(container: HTMLElement, card: MiningCardId): number {
+  const text = getPerMinuteElement(container, card).textContent?.replace(/,/g, '');
+  const amount = Number(text?.match(/-?\d+(?:\.\d+)?/)?.[0]);
+  if (!Number.isFinite(amount)) throw new Error(`無法讀取 ${card} 每分鐘收益金額`);
+  return amount;
+}
+
+function getBreakdownSection(container: HTMLElement, card: MiningCardId): HTMLElement {
+  const section = container
+    .querySelector<HTMLElement>(`#mining-${card}-breakdown-title`)
+    ?.closest<HTMLElement>('section');
+  if (!section) throw new Error(`找不到 ${card} 結果明細`);
+  return section;
+}
+
+function setInputValue(container: HTMLElement, id: string, value: string): void {
+  const input = container.querySelector<HTMLInputElement>(`#${id}`);
+  if (!input) throw new Error(`找不到挖礦輸入欄位：${id}`);
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+  if (!setter) throw new Error('找不到 input value setter');
+  setter.call(input, value);
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+async function updateInputs(
+  container: HTMLElement,
+  values: readonly (readonly [id: string, value: string])[],
+): Promise<void> {
+  await act(async () => {
+    for (const [id, value] of values) setInputValue(container, id, value);
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
+async function clickElement(element: HTMLElement): Promise<void> {
+  await act(async () => {
+    element.click();
+    await Promise.resolve();
+  });
 }
 
 describe('Mining calculator presentation', () => {
@@ -201,5 +325,164 @@ describe('Mining calculator presentation', () => {
         tradeExploitPercent: '0',
       }).errors.btcPerAi,
     ).toBe('rate');
+  });
+});
+
+describe('Mining calculator net profit unit toggles', () => {
+  it('預設 BTC 卡顯示 BTC、AI 卡顯示 AI，且按鈕有明確可及名稱與鍵盤焦點', async () => {
+    const { container } = await mountMiningCalculator();
+    const labels = getMessages('en').tools.mining;
+    const btcToggle = getToggle(container, 'btc');
+    const aiToggle = getToggle(container, 'ai');
+
+    expect(btcToggle.type).toBe('button');
+    expect(aiToggle.type).toBe('button');
+    expect(btcToggle.textContent).toBe('');
+    expect(aiToggle.textContent).toBe('');
+    expect(btcToggle.childElementCount).toBe(1);
+    expect(aiToggle.childElementCount).toBe(1);
+    expect(btcToggle.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true');
+    expect(aiToggle.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true');
+    expect(getNetProfitElement(container, 'btc', 'unit').textContent).toBe('BTC / action');
+    expect(getNetProfitElement(container, 'ai', 'unit').textContent).toBe('AI / action');
+    expect(getPerMinuteElement(container, 'btc').textContent).toContain(labels.btcPerMinuteUnit);
+    expect(getPerMinuteElement(container, 'ai').textContent).toContain(labels.aiPerMinuteUnit);
+    expect(btcToggle.getAttribute('aria-label')).toBe(
+      'BTC mining earnings currently shows BTC; switch to AI',
+    );
+    expect(aiToggle.getAttribute('aria-label')).toBe(
+      'AI crafting earnings currently shows AI; switch to BTC',
+    );
+    expect(btcToggle.className).toContain('min-h-11');
+    expect(btcToggle.className).toContain('min-w-11');
+    expect(btcToggle.className).toContain('focus-visible:ring-2');
+    expect(btcToggle.title).toBe(btcToggle.getAttribute('aria-label'));
+    expect(container.textContent).not.toContain(labels.btcDescription);
+    expect(container.textContent).not.toContain(labels.aiDescription);
+
+    btcToggle.focus();
+    expect(document.activeElement).toBe(btcToggle);
+  });
+
+  it('在 ROI 前呈現依 progression 時間換算的每分鐘淨收益', async () => {
+    const { container } = await mountMiningCalculator();
+    const labels = getMessages('en').tools.mining;
+    const miningMethod = getProgressionMethods('mining-skill')
+      .find((method) => method.id === 'mining');
+    const aiCraftingMethod = getProgressionMethods('mining-skill')
+      .find((method) => method.id === 'ai-crafting');
+
+    if (!miningMethod?.unitMinutes || !aiCraftingMethod?.unitMinutes) {
+      throw new Error('挖礦與 AI 製作 progression 必須提供 unitMinutes');
+    }
+
+    for (const card of ['btc', 'ai'] as const) {
+      const breakdown = getBreakdownSection(container, card);
+      const rowLabels = Array.from(breakdown.querySelectorAll('dt'), (row) => row.textContent);
+      expect(rowLabels.indexOf(labels.perMinute)).toBeGreaterThanOrEqual(0);
+      expect(rowLabels.indexOf(labels.perMinute)).toBeLessThan(rowLabels.indexOf(labels.roi));
+    }
+
+    expect(readPerMinuteAmount(container, 'btc')).toBeCloseTo(
+      readNetProfitAmount(container, 'btc') / miningMethod.unitMinutes,
+      1,
+    );
+    expect(readPerMinuteAmount(container, 'ai')).toBeCloseTo(
+      readNetProfitAmount(container, 'ai') / 100 / aiCraftingMethod.unitMinutes,
+      1,
+    );
+  });
+
+  it('兩張卡各自獨立切換，且都能來回切換', async () => {
+    const { container } = await mountMiningCalculator();
+    const btcToggle = getToggle(container, 'btc');
+    const aiToggle = getToggle(container, 'ai');
+
+    await clickElement(btcToggle);
+    expect(btcToggle.textContent).toBe('');
+    expect(getNetProfitElement(container, 'btc', 'unit').textContent).toBe('AI / action');
+    expect(getPerMinuteElement(container, 'btc').textContent).toContain('AI / minute');
+    expect(aiToggle.textContent).toBe('');
+
+    await clickElement(aiToggle);
+    expect(aiToggle.textContent).toBe('');
+    expect(getNetProfitElement(container, 'ai', 'unit').textContent).toBe('BTC / action');
+    expect(getPerMinuteElement(container, 'ai').textContent).toContain('BTC / minute');
+    expect(btcToggle.textContent).toBe('');
+
+    await clickElement(btcToggle);
+    expect(btcToggle.textContent).toBe('');
+    expect(aiToggle.textContent).toBe('');
+
+    await clickElement(aiToggle);
+    expect(aiToggle.textContent).toBe('');
+    expect(getNetProfitElement(container, 'btc', 'unit').textContent).toBe('BTC / action');
+    expect(getNetProfitElement(container, 'ai', 'unit').textContent).toBe('AI / action');
+  });
+
+  it('依目前有效匯率重新計算兩種淨收益換算', async () => {
+    const { container } = await mountMiningCalculator();
+    await updateInputs(container, [['mining-btc-per-ai', '100']]);
+
+    const btcAtHundred = readNetProfitAmount(container, 'btc');
+    const aiAtHundred = readNetProfitAmount(container, 'ai');
+    const btcPerMinuteAtHundred = readPerMinuteAmount(container, 'btc');
+    const aiPerMinuteAtHundred = readPerMinuteAmount(container, 'ai');
+    await clickElement(getToggle(container, 'btc'));
+    expect(readNetProfitAmount(container, 'btc')).toBeCloseTo(btcAtHundred / 100, 1);
+    expect(readPerMinuteAmount(container, 'btc')).toBeCloseTo(btcPerMinuteAtHundred / 100, 1);
+    await clickElement(getToggle(container, 'ai'));
+    expect(readNetProfitAmount(container, 'ai')).toBeCloseTo(aiAtHundred * 100, 1);
+    expect(readPerMinuteAmount(container, 'ai')).toBeCloseTo(aiPerMinuteAtHundred * 100, 1);
+
+    await updateInputs(container, [['mining-btc-per-ai', '200']]);
+    await clickElement(getToggle(container, 'btc'));
+    const btcAtTwoHundred = readNetProfitAmount(container, 'btc');
+    const btcPerMinuteAtTwoHundred = readPerMinuteAmount(container, 'btc');
+    await clickElement(getToggle(container, 'ai'));
+    const aiAtTwoHundred = readNetProfitAmount(container, 'ai');
+    const aiPerMinuteAtTwoHundred = readPerMinuteAmount(container, 'ai');
+
+    await clickElement(getToggle(container, 'btc'));
+    expect(readNetProfitAmount(container, 'btc')).toBeCloseTo(btcAtTwoHundred / 200, 1);
+    expect(readPerMinuteAmount(container, 'btc')).toBeCloseTo(btcPerMinuteAtTwoHundred / 200, 1);
+    await clickElement(getToggle(container, 'ai'));
+    expect(readNetProfitAmount(container, 'ai')).toBeCloseTo(aiAtTwoHundred * 200, 1);
+    expect(readPerMinuteAmount(container, 'ai')).toBeCloseTo(aiPerMinuteAtTwoHundred * 200, 1);
+  });
+
+  it('維持負收益紅色，並依收益正負更新文字顏色', async () => {
+    const { container } = await mountMiningCalculator();
+    await updateInputs(container, [
+      ['mining-level', '800'],
+      ['mining-hash-price', '1.9'],
+      ['mining-btc-per-ai', '10000'],
+      ['mining-trade-exploit', '0'],
+    ]);
+
+    expect(readNetProfitAmount(container, 'btc')).toBeLessThan(0);
+    expect(readPerMinuteAmount(container, 'btc')).toBeLessThan(0);
+    expect(getNetProfitElement(container, 'btc', 'value').className).toContain('text-destructive');
+    expect(readNetProfitAmount(container, 'ai')).toBeGreaterThan(0);
+    expect(readPerMinuteAmount(container, 'ai')).toBeGreaterThan(0);
+    expect(getNetProfitElement(container, 'ai', 'value').className).toContain('text-foreground');
+
+    await updateInputs(container, [['mining-trade-exploit', '100']]);
+    expect(readNetProfitAmount(container, 'btc')).toBeGreaterThan(0);
+    expect(readPerMinuteAmount(container, 'btc')).toBeGreaterThan(0);
+    expect(getNetProfitElement(container, 'btc', 'value').className).toContain('text-foreground');
+  });
+
+  it('匯率為 0 或非整數時沿用驗證無結果，不顯示 NaN 或 Infinity', async () => {
+    const { container } = await mountMiningCalculator();
+    const labels = getMessages('en').tools.mining;
+
+    for (const invalidRate of ['0', '0.5']) {
+      await updateInputs(container, [['mining-btc-per-ai', invalidRate]]);
+      expect(container.textContent).toContain(labels.validationSummary);
+      expect(container.querySelector('[data-testid="mining-net-profit-toggle-btc"]')).toBeNull();
+      expect(container.querySelector('[data-testid="mining-net-profit-toggle-ai"]')).toBeNull();
+      expect(container.textContent).not.toMatch(/NaN|Infinity/);
+    }
   });
 });

@@ -920,7 +920,6 @@ export function EarningsTrendChart({
       <Card>
         <CardHeader className="px-3 sm:px-6">
           <CardTitle id="earnings-chart-heading" className="site-tool-section-heading">{labels.trendTitle}</CardTitle>
-          <p className="text-sm leading-6 text-muted-foreground">{labels.trendDescription}</p>
         </CardHeader>
         <CardContent className="px-3 pt-0 sm:px-6">
           <Tabs.Root
@@ -958,9 +957,6 @@ export function EarningsTrendChart({
                   ))}
                 </Tabs.List>
               </div>
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                {labels.trendGroupHint}
-              </p>
             </div>
 
             <Tabs.Panel value={activeGroupId} className="min-w-0">
@@ -1037,17 +1033,10 @@ export function EarningsTrendChart({
                 </div>
               )}
 
-              {activeGroupId === 'fixed' ? (
-                <p
-                  className="mt-5 rounded-md border border-border bg-muted/40 p-3 text-sm leading-6 text-muted-foreground"
-                  data-earnings-chart-fixed-hint="true"
-                >
-                  {labels.trendFixedHint}
-                </p>
-              ) : (
+              {activeGroupId === 'fixed' ? null : (
                 <p
                   id="earnings-chart-interaction-hint"
-                  className="mt-5 rounded-md border border-border bg-muted/40 p-3 text-sm leading-6 text-muted-foreground"
+                  className="sr-only"
                 >
                   {labels.trendInteractionHint}
                 </p>
