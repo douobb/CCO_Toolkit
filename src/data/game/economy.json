@@ -161,14 +161,14 @@
       "itemId": "old-pouch",
       "unit": "AI/item",
       "defaultBasisCurrencyId": "ai",
-      "defaultBasisValue": 12.5,
+      "defaultBasisValue": 13,
       "verification": "confirmed"
     },
     {
       "itemId": "fanny-pack",
       "unit": "AI/item",
       "defaultBasisCurrencyId": "ai",
-      "defaultBasisValue": 130,
+      "defaultBasisValue": 136,
       "verification": "confirmed"
     },
     {
@@ -192,7 +192,7 @@
       "baseCurrencyId": "ai",
       "quoteCurrencyId": "btc",
       "unit": "BTC/AI",
-      "defaultValue": 8150,
+      "defaultValue": 8450,
       "verification": "confirmed"
     }
   ],

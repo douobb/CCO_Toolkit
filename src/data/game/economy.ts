@@ -21,8 +21,8 @@ const economyDataEnvelope = {
   datasetId: 'economy',
   domain: 'economy',
   schemaVersion: '1.0.0',
-  dataVersion: 'cco-found-initial-snapshot',
-  updatedAt: '2026-08-28',
+  dataVersion: 'cco-found-price-update-2026-10-05',
+  updatedAt: '2026-10-05',
   sources: [ccoFoundDataSource],
   payload: rawEconomy,
 } as const;

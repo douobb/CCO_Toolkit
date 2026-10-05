@@ -11,7 +11,10 @@ import {
 } from '@/lib/storage';
 import { getMessages } from '@/lib/translations';
 
-import { SharedUserInputsManager } from './shared-user-inputs-manager';
+import {
+  SharedUserInputsManager,
+  type SharedUserInputsManagerMode,
+} from './shared-user-inputs-manager';
 import { SharedUserInputsProvider } from './shared-user-inputs-react';
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -40,6 +43,7 @@ afterEach(async () => {
 function createSnapshot(
   prices: SharedUserInputs['economy']['prices'] = [],
   exchangeRates: SharedUserInputs['economy']['exchangeRates'] = [],
+  cacheRates: SharedUserInputs['economy']['cacheRates'] = [],
 ): SharedUserInputs {
   return {
     ...defaultSharedUserInputs,
@@ -47,11 +51,18 @@ function createSnapshot(
       ...defaultSharedUserInputs.economy,
       prices,
       exchangeRates,
+      cacheRates,
     },
   };
 }
 
-async function mountManager(snapshot: SharedUserInputs = defaultSharedUserInputs) {
+async function mountManager(
+  snapshot: SharedUserInputs = defaultSharedUserInputs,
+  options: {
+    readonly mode?: SharedUserInputsManagerMode;
+    readonly idPrefix?: string;
+  } = {},
+) {
   const container = document.createElement('div');
   document.body.append(container);
   const store = createSharedUserInputsStore({ storage: null });
@@ -62,7 +73,12 @@ async function mountManager(snapshot: SharedUserInputs = defaultSharedUserInputs
   await act(async () => {
     root.render(
       <SharedUserInputsProvider store={store}>
-        <SharedUserInputsManager labels={getMessages('zh-tw').settingsPage} locale="zh-tw" />
+        <SharedUserInputsManager
+          labels={getMessages('zh-tw').settingsPage}
+          locale="zh-tw"
+          mode={options.mode}
+          idPrefix={options.idPrefix}
+        />
       </SharedUserInputsProvider>,
     );
     await Promise.resolve();
@@ -171,7 +187,7 @@ describe('Shared User Inputs market price currency display', () => {
     );
     if (!exchangeRate) throw new Error('找不到 BTC/AI 匯率欄位');
 
-    expect(lockedContainer.value).toBe('0.368098159509202');
+    expect(lockedContainer.value).toBe('0.355029585798817');
     setInputValue(exchangeRate, '10000');
     await act(async () => {
       await Promise.resolve();
@@ -248,14 +264,41 @@ describe('Shared User Inputs market price currency display', () => {
     ]);
   });
 
-  it('恢復預設會移除 sparse price override，且沿用目前顯示貨幣', async () => {
-    const mounted = await mountManager(createSnapshot(
-      [{ itemId: 'tech-scrap', currencyId: 'btc', amount: 2 }],
-      [{ id: 'btc-per-ai', value: 100 }],
-    ));
+  it('恢復全部市場預設會清除三類 sparse override、保留玩家資料與目前顯示貨幣', async () => {
+    const initialSnapshot: SharedUserInputs = {
+      ...createSnapshot(
+        [
+          { itemId: 'tech-scrap', currencyId: 'btc', amount: 2 },
+          { itemId: 'locked-container', currencyId: 'ai', amount: 5_000 },
+        ],
+        [{ id: 'btc-per-ai', value: 100 }],
+        [
+          { id: 'trash', value: 2 },
+          { id: 'common', value: 4 },
+          { id: 'high-quality', value: 5 },
+          { id: 'rare', value: 7 },
+        ],
+      ),
+      progression: {
+        ...defaultSharedUserInputs.progression,
+        player: { level: 120 },
+        skills: [{ id: 'mining-skill', level: 80 }],
+      },
+      effects: {
+        ...defaultSharedUserInputs.effects,
+        buffs: [{ id: 'btc-buff-percent', percentage: 40 }],
+      },
+      equipment: {
+        ...defaultSharedUserInputs.equipment,
+        bargainPercent: 20,
+      },
+    };
+    const mounted = await mountManager(initialSnapshot);
 
     await click(getCurrencyButton(mounted.container, 'btc'));
     expect(getPriceInput(mounted.container, 'tech-scrap').value).toBe('2');
+    expect(mounted.container.querySelector<HTMLInputElement>('#shared-exchange-btc-per-ai')?.value)
+      .toBe('100');
 
     const restoreButton = [...mounted.container.querySelectorAll('button')]
       .find((button) => button.textContent?.includes(getMessages('zh-tw').settingsPage.restorePrices));
@@ -264,11 +307,85 @@ describe('Shared User Inputs market price currency display', () => {
     }
     await click(restoreButton);
 
-    expect(mounted.store.getSnapshot().economy.prices).toEqual([]);
-    expect(getPriceInput(mounted.container, 'tech-scrap').value).toBe('11000');
+    const restored = mounted.store.getSnapshot();
+    expect(restored.economy.prices).toEqual([]);
+    expect(restored.economy.exchangeRates).toEqual([]);
+    expect(restored.economy.cacheRates).toEqual([]);
+    expect(restored.progression).toEqual(initialSnapshot.progression);
+    expect(restored.effects).toEqual(initialSnapshot.effects);
+    expect(restored.equipment).toEqual(initialSnapshot.equipment);
+    expect(mounted.container.querySelector<HTMLInputElement>('#shared-exchange-btc-per-ai')?.value)
+      .toBe('8450');
+    expect(getPriceInput(mounted.container, 'tech-scrap').value).toBe('929500');
     expect(getPriceInput(mounted.container, 'locked-container').value).toBe('3000');
+    expect(mounted.container.querySelector<HTMLInputElement>('#shared-cache-trash')?.value)
+      .toBe('9');
+    expect(mounted.container.querySelector<HTMLInputElement>('#shared-cache-common')?.value)
+      .toBe('8');
+    expect(mounted.container.querySelector<HTMLInputElement>('#shared-cache-high-quality')?.value)
+      .toBe('6');
+    expect(mounted.container.querySelector<HTMLInputElement>('#shared-cache-rare')?.value)
+      .toBe('3');
+    expect(getCurrencyButton(mounted.container, 'btc').getAttribute('aria-pressed')).toBe('true');
     expect(getUnitText(mounted.container, 'tech-scrap')).toBe('BTC/k');
     expect(getUnitText(mounted.container, 'locked-container')).toBe('BTC/item');
+  });
+
+  it('quick 恢復物價預設同樣清除價格、AI→BTC 匯率與快取，保留非市場資料和顯示貨幣', async () => {
+    const initialSnapshot: SharedUserInputs = {
+      ...createSnapshot(
+        [{ itemId: 'tech-scrap', currencyId: 'btc', amount: 2 }],
+        [{ id: 'btc-per-ai', value: 100 }],
+        [{ id: 'trash', value: 2 }],
+      ),
+      progression: {
+        ...defaultSharedUserInputs.progression,
+        player: { level: 120 },
+        skills: [{ id: 'mining-skill', level: 80 }],
+      },
+      effects: {
+        ...defaultSharedUserInputs.effects,
+        buffs: [{ id: 'btc-buff-percent', percentage: 40 }],
+      },
+      equipment: {
+        ...defaultSharedUserInputs.equipment,
+        bargainPercent: 20,
+      },
+    };
+    const mounted = await mountManager(initialSnapshot, {
+      mode: 'quick',
+      idPrefix: 'quick-editor',
+    });
+
+    await click(getCurrencyButton(mounted.container, 'btc'));
+    expect(mounted.container.querySelector<HTMLInputElement>(
+      '#quick-editor-shared-price-tech-scrap',
+    )?.value).toBe('2');
+
+    const restoreButton = [...mounted.container.querySelectorAll('button')]
+      .find((button) => button.textContent?.includes(getMessages('zh-tw').settingsPage.restorePrices));
+    if (!(restoreButton instanceof HTMLButtonElement)) {
+      throw new Error('找不到恢復物價預設值按鈕');
+    }
+    await click(restoreButton);
+
+    const restored = mounted.store.getSnapshot();
+    expect(restored.economy.prices).toEqual([]);
+    expect(restored.economy.exchangeRates).toEqual([]);
+    expect(restored.economy.cacheRates).toEqual([]);
+    expect(restored.progression).toEqual(initialSnapshot.progression);
+    expect(restored.effects).toEqual(initialSnapshot.effects);
+    expect(restored.equipment).toEqual(initialSnapshot.equipment);
+    expect(mounted.container.querySelector<HTMLInputElement>(
+      '#quick-editor-shared-exchange-btc-per-ai',
+    )?.value).toBe('8450');
+    expect(mounted.container.querySelector<HTMLInputElement>(
+      '#quick-editor-shared-price-tech-scrap',
+    )?.value).toBe('929500');
+    expect(mounted.container.querySelector('#quick-editor-shared-cache-trash')).toBeNull();
+    expect(getCurrencyButton(mounted.container, 'btc').getAttribute('aria-pressed')).toBe('true');
+    expect(mounted.container.querySelector('#quick-editor-shared-price-tech-scrap-unit')?.textContent)
+      .toBe('BTC/k');
   });
 
   it('提供有名稱且會反映目前狀態的可存取切換群組', async () => {
@@ -284,5 +401,49 @@ describe('Shared User Inputs market price currency display', () => {
 
     expect(getCurrencyButton(mounted.container, 'ai').getAttribute('aria-pressed')).toBe('false');
     expect(getCurrencyButton(mounted.container, 'btc').getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('quick/full 共用表單 model、隔離欄位 ID，且 quick 不顯示全資料重設或快取欄位', async () => {
+    const container = document.createElement('div');
+    document.body.append(container);
+    const store = createSharedUserInputsStore({ storage: null });
+    const root = createRoot(container);
+    mountedManagers.push({ container, root, store });
+
+    await act(async () => {
+      root.render(
+        <SharedUserInputsProvider store={store}>
+          <main>
+            <SharedUserInputsManager
+              labels={getMessages('zh-tw').settingsPage}
+              locale="zh-tw"
+              mode="full"
+              idPrefix="full-editor"
+            />
+            <SharedUserInputsManager
+              labels={getMessages('zh-tw').settingsPage}
+              locale="zh-tw"
+              mode="quick"
+              idPrefix="quick-editor"
+            />
+          </main>
+        </SharedUserInputsProvider>,
+      );
+      await Promise.resolve();
+    });
+
+    const ids = [...container.querySelectorAll<HTMLElement>('[id]')]
+      .map((element) => element.id);
+    const fullManager = container.querySelector<HTMLElement>('[data-mode="full"]');
+    const quickManager = container.querySelector<HTMLElement>('[data-mode="quick"]');
+    const resetTitle = getMessages('zh-tw').settingsPage.resetTitle;
+
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(container.querySelector('#full-editor-shared-level-level')).not.toBeNull();
+    expect(container.querySelector('#quick-editor-shared-level-level')).not.toBeNull();
+    expect(container.querySelector('#full-editor-shared-cache-trash')).not.toBeNull();
+    expect(container.querySelector('#quick-editor-shared-cache-trash')).toBeNull();
+    expect(fullManager?.textContent).toContain(resetTitle);
+    expect(quickManager?.textContent).not.toContain(resetTitle);
   });
 });

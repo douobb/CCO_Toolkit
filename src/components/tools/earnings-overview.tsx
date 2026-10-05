@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useMemo,
+  useState,
   type ReactNode,
 } from 'react';
 import { Download } from 'lucide-react';
@@ -34,11 +35,34 @@ import {
   EARNINGS_COMPARISON_MODES,
   EARNINGS_LEVEL_MAX,
   EARNINGS_LEVEL_MIN,
+  EARNINGS_TIME_REDUCTION_PERCENT,
   type EarningsCalculation,
+  type EarningsActivityResult,
   type EarningsComparisonMode,
   type EarningsInputs,
   type EarningsInputError,
 } from '@/lib/earnings-calculator';
+import {
+  calculateManualMixedCrushing,
+  calculateRecommendedMixedCrushing,
+  getMixedCrushingComparisonValue,
+  mixedCrushingUnitSeconds,
+  type MixedCrushingResult,
+} from '@/lib/mixed-crushing-calculator';
+import {
+  defaultMixedCrushingCounts,
+  getMixedCrushingBaseSeconds,
+  getMixedCrushingBaseTimeBudget,
+  getMixedCrushingDynamicMax,
+  mixedCrushingModeSchema,
+  mixedCrushingTypeKeys,
+  parseMixedCrushingCountInputs,
+  validateMixedCrushingCounts,
+  type MixedCrushingCountInputs,
+  type MixedCrushingCounts,
+  type MixedCrushingMode,
+  type MixedCrushingTypeKey,
+} from '@/lib/mixed-crushing-schema';
 import {
   BUFF_PERCENT_DEFAULT_STRING,
   normalizeLegacyBuffPercentString,
@@ -54,6 +78,10 @@ import {
 import { useToolStateStorage } from '@/lib/storage/use-tool-state';
 
 import { EarningsTrendChart } from './earnings-chart';
+import {
+  formatMixedCrushingMessage,
+  mixedCrushingUiLabels,
+} from './mixed-crushing-labels';
 
 export interface EarningsOverviewToolLabels {
   readonly primaryInputs: string;
@@ -129,6 +157,10 @@ export interface EarningsOverviewFormValues {
 
 export type EarningsOverviewToolState = EarningsOverviewFormValues & {
   readonly comparisonMode: EarningsComparisonMode;
+  readonly mixedCrushingMode: MixedCrushingMode;
+  readonly mixedMedicalCount: string;
+  readonly mixedAmmunitionCount: string;
+  readonly mixedMilitaryCount: string;
 };
 export type EarningsOverviewField = keyof EarningsOverviewFormValues;
 export type EarningsOverviewErrors = Partial<
@@ -146,6 +178,10 @@ const defaultEarningsOverviewToolState: EarningsOverviewToolState = {
   bargainPercent: '0',
   btcBuffPercent: BUFF_PERCENT_DEFAULT_STRING,
   comparisonMode: 'per-minute',
+  mixedCrushingMode: 'recommended',
+  mixedMedicalCount: String(defaultMixedCrushingCounts.medical),
+  mixedAmmunitionCount: String(defaultMixedCrushingCounts.ammunition),
+  mixedMilitaryCount: String(defaultMixedCrushingCounts.military),
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -173,6 +209,63 @@ const earningsOverviewStateFieldsWithoutBuff = [
   ...legacyEarningsOverviewFieldsWithoutBuff,
   'comparisonMode',
 ] as const;
+const earningsOverviewStateFieldsWithMixedCrushing = [
+  ...earningsOverviewStateFields,
+  'mixedCrushingMode',
+  'mixedMedicalCount',
+  'mixedAmmunitionCount',
+  'mixedMilitaryCount',
+] as const;
+const earningsOverviewStateFieldsWithoutBuffWithMixedCrushing = [
+  ...earningsOverviewStateFieldsWithoutBuff,
+  'mixedCrushingMode',
+  'mixedMedicalCount',
+  'mixedAmmunitionCount',
+  'mixedMilitaryCount',
+] as const;
+
+function getStoredMixedCrushingCountInputs(
+  value: Record<string, unknown>,
+): MixedCrushingCountInputs | null {
+  const parsed = parseMixedCrushingCountInputs({
+    medical: value.mixedMedicalCount,
+    ammunition: value.mixedAmmunitionCount,
+    military: value.mixedMilitaryCount,
+  });
+  return parsed === null
+    ? null
+    : {
+        medical: String(parsed.medical),
+        ammunition: String(parsed.ammunition),
+        military: String(parsed.military),
+      };
+}
+
+function withMixedCrushingDefaults(
+  value: Record<string, string>,
+  comparisonMode: EarningsComparisonMode,
+): EarningsOverviewToolState {
+  const storedCounts = getStoredMixedCrushingCountInputs(value);
+  const mixedCrushingMode = mixedCrushingModeSchema.safeParse(value.mixedCrushingMode);
+  return {
+    searchLevel: value.searchLevel,
+    printingLevel: value.printingLevel,
+    miningLevel: value.miningLevel,
+    bargainPercent: value.bargainPercent,
+    btcBuffPercent: normalizeLegacyBuffPercentString(value.btcBuffPercent)
+      ?? defaultEarningsOverviewToolState.btcBuffPercent,
+    comparisonMode,
+    mixedCrushingMode: mixedCrushingMode.success
+      ? mixedCrushingMode.data
+      : defaultEarningsOverviewToolState.mixedCrushingMode,
+    mixedMedicalCount: storedCounts?.medical
+      ?? defaultEarningsOverviewToolState.mixedMedicalCount,
+    mixedAmmunitionCount: storedCounts?.ammunition
+      ?? defaultEarningsOverviewToolState.mixedAmmunitionCount,
+    mixedMilitaryCount: storedCounts?.military
+      ?? defaultEarningsOverviewToolState.mixedMilitaryCount,
+  };
+}
 
 function hasStringFields(
   value: Record<string, unknown>,
@@ -184,6 +277,10 @@ function hasStringFields(
 
 function isEarningsComparisonMode(value: string): value is EarningsComparisonMode {
   return EARNINGS_COMPARISON_MODES.some((mode) => mode === value);
+}
+
+function getElapsedMinutesForComparisonMode(mode: EarningsComparisonMode): number | null {
+  return mode === 'per-minute' ? null : Number(mode.slice('elapsed-'.length));
 }
 
 /**
@@ -200,56 +297,44 @@ export function normalizeEarningsOverviewToolState(
   if (btcBuffPercent === undefined) return undefined;
 
   if (hasStringFields(value, legacyEarningsOverviewFields)) {
-    return {
-      searchLevel: value.searchLevel,
-      printingLevel: value.printingLevel,
-      miningLevel: value.miningLevel,
-      bargainPercent: value.bargainPercent,
-      btcBuffPercent,
-      comparisonMode: 'per-minute',
-    };
+    return withMixedCrushingDefaults(value, 'per-minute');
   }
 
   if (hasStringFields(value, legacyEarningsOverviewFieldsWithoutBuff)) {
-    return {
-      searchLevel: value.searchLevel,
-      printingLevel: value.printingLevel,
-      miningLevel: value.miningLevel,
-      bargainPercent: value.bargainPercent,
-      btcBuffPercent,
-      comparisonMode: 'per-minute',
-    };
+    return withMixedCrushingDefaults({ ...value, btcBuffPercent }, 'per-minute');
   }
 
   if (hasStringFields(value, earningsOverviewStateFields)) {
     if (!isEarningsComparisonMode(value.comparisonMode)) return undefined;
+    return withMixedCrushingDefaults(value, value.comparisonMode);
+  }
 
-    return {
-      searchLevel: value.searchLevel,
-      printingLevel: value.printingLevel,
-      miningLevel: value.miningLevel,
-      bargainPercent: value.bargainPercent,
-      btcBuffPercent,
-      comparisonMode: value.comparisonMode,
-    };
+  if (hasStringFields(value, earningsOverviewStateFieldsWithMixedCrushing)) {
+    if (!isEarningsComparisonMode(value.comparisonMode)) return undefined;
+    return withMixedCrushingDefaults(value, value.comparisonMode);
+  }
+
+  if (hasStringFields(value, earningsOverviewStateFieldsWithoutBuffWithMixedCrushing)) {
+    if (!isEarningsComparisonMode(value.comparisonMode)) return undefined;
+    return withMixedCrushingDefaults(
+      { ...value, btcBuffPercent },
+      value.comparisonMode,
+    );
   }
 
   if (!hasStringFields(value, earningsOverviewStateFieldsWithoutBuff)) return undefined;
   if (!isEarningsComparisonMode(value.comparisonMode)) return undefined;
 
-  return {
-    searchLevel: value.searchLevel,
-    printingLevel: value.printingLevel,
-    miningLevel: value.miningLevel,
-    bargainPercent: value.bargainPercent,
-    btcBuffPercent,
-    comparisonMode: value.comparisonMode,
-  };
+  return withMixedCrushingDefaults({ ...value, btcBuffPercent }, value.comparisonMode);
 }
 
 function isEarningsOverviewToolState(value: unknown): value is EarningsOverviewToolState {
-  if (!isRecord(value) || !hasStringFields(value, earningsOverviewStateFields)) return false;
-  return isEarningsComparisonMode(value.comparisonMode);
+  if (!isRecord(value) || !hasStringFields(value, earningsOverviewStateFieldsWithMixedCrushing)) {
+    return false;
+  }
+  return isEarningsComparisonMode(value.comparisonMode)
+    && mixedCrushingModeSchema.safeParse(value.mixedCrushingMode).success
+    && getStoredMixedCrushingCountInputs(value) !== null;
 }
 
 function parseInteger(value: string, min: number, max: number): number | null {
@@ -357,12 +442,18 @@ export function calculateEarningsOverviewTool(
 }
 
 interface EarningsOverviewContextValue {
-  readonly values: EarningsOverviewFormValues;
+  readonly values: EarningsOverviewToolState;
   readonly errors: EarningsOverviewErrors;
   readonly inputs: EarningsInputs | null;
   readonly result: EarningsCalculation | null;
+  readonly mixedCrushingResult: MixedCrushingResult | null;
+  readonly mixedCrushingIssue: 'count' | 'time' | null;
+  readonly mixedCrushingCounts: MixedCrushingCounts;
+  readonly mixedCrushingBaseTimeBudgetSeconds: number;
   readonly prices: ResolvedMarketPrices;
   readonly setValue: (field: EarningsOverviewField, value: string) => void;
+  readonly setMixedCrushingCounts: (counts: MixedCrushingCounts) => void;
+  readonly setMixedCrushingMode: (mode: MixedCrushingMode) => void;
   readonly fillFromShared: () => void;
 }
 
@@ -389,6 +480,10 @@ export function EarningsOverviewToolProvider({ children }: { children: ReactNode
       normalize: normalizeEarningsOverviewToolState,
       initialize: () => ({
         ...selectEarningsOverviewSharedValues(sharedStore.getSnapshot()),
+        mixedCrushingMode: defaultEarningsOverviewToolState.mixedCrushingMode,
+        mixedMedicalCount: defaultEarningsOverviewToolState.mixedMedicalCount,
+        mixedAmmunitionCount: defaultEarningsOverviewToolState.mixedAmmunitionCount,
+        mixedMilitaryCount: defaultEarningsOverviewToolState.mixedMilitaryCount,
         btcBuffPercent: defaultEarningsOverviewToolState.btcBuffPercent,
         comparisonMode: 'per-minute',
       }),
@@ -397,10 +492,57 @@ export function EarningsOverviewToolProvider({ children }: { children: ReactNode
 
   const setValue = useCallback(
     (field: EarningsOverviewField, value: string) => {
-      setValues((current) => ({ ...current, [field]: value }));
+      setValues((current) => {
+        if (field === 'comparisonMode') {
+          if (!isEarningsComparisonMode(value) || current.comparisonMode === value) {
+            return current;
+          }
+          return {
+            ...current,
+            comparisonMode: value,
+            mixedCrushingMode: 'recommended',
+            mixedMedicalCount: defaultEarningsOverviewToolState.mixedMedicalCount,
+            mixedAmmunitionCount: defaultEarningsOverviewToolState.mixedAmmunitionCount,
+            mixedMilitaryCount: defaultEarningsOverviewToolState.mixedMilitaryCount,
+          };
+        }
+        return { ...current, [field]: value };
+      });
     },
     [setValues],
   );
+
+  const mixedCrushingCounts = useMemo(() => parseMixedCrushingCountInputs({
+    medical: values.mixedMedicalCount,
+    ammunition: values.mixedAmmunitionCount,
+    military: values.mixedMilitaryCount,
+  }) ?? { ...defaultMixedCrushingCounts }, [values]);
+
+  const mixedCrushingBaseTimeBudgetSeconds = getMixedCrushingBaseTimeBudget(
+    getElapsedMinutesForComparisonMode(values.comparisonMode),
+    EARNINGS_TIME_REDUCTION_PERCENT,
+  );
+  const mixedCrushingIssue = values.mixedCrushingMode === 'manual'
+    ? validateMixedCrushingCounts(
+        mixedCrushingCounts,
+        mixedCrushingBaseTimeBudgetSeconds,
+        mixedCrushingUnitSeconds,
+      )
+    : null;
+
+  const setMixedCrushingCounts = useCallback((counts: MixedCrushingCounts) => {
+    setValues((current) => ({
+      ...current,
+      mixedCrushingMode: 'manual',
+      mixedMedicalCount: String(counts.medical),
+      mixedAmmunitionCount: String(counts.ammunition),
+      mixedMilitaryCount: String(counts.military),
+    }));
+  }, [setValues]);
+
+  const setMixedCrushingMode = useCallback((mode: MixedCrushingMode) => {
+    setValues((current) => ({ ...current, mixedCrushingMode: mode }));
+  }, [setValues]);
 
   const fillFromShared = useCallback(() => {
     setValues((current) => applyEarningsOverviewSharedValues(
@@ -413,17 +555,41 @@ export function EarningsOverviewToolProvider({ children }: { children: ReactNode
     () => calculateEarningsOverviewTool(values, sharedSnapshot),
     [sharedSnapshot, values],
   );
+  const mixedCrushingResult = useMemo(() => {
+    if (!calculation.result || mixedCrushingIssue !== null) return null;
+    return values.mixedCrushingMode === 'manual'
+      ? calculateManualMixedCrushing(calculation.result, mixedCrushingCounts)
+      : calculateRecommendedMixedCrushing(calculation.result);
+  }, [calculation.result, mixedCrushingCounts, mixedCrushingIssue, values.mixedCrushingMode]);
   const contextValue = useMemo(
     () => ({
       values,
       errors: calculation.errors,
       inputs: calculation.inputs,
       result: calculation.result,
+      mixedCrushingResult,
+      mixedCrushingIssue,
+      mixedCrushingCounts,
+      mixedCrushingBaseTimeBudgetSeconds,
       prices,
       setValue,
+      setMixedCrushingCounts,
+      setMixedCrushingMode,
       fillFromShared,
     }),
-    [calculation, fillFromShared, prices, setValue, values],
+    [
+      calculation,
+      fillFromShared,
+      mixedCrushingBaseTimeBudgetSeconds,
+      mixedCrushingCounts,
+      mixedCrushingIssue,
+      mixedCrushingResult,
+      prices,
+      setMixedCrushingCounts,
+      setMixedCrushingMode,
+      setValue,
+      values,
+    ],
   );
 
   return (
@@ -452,10 +618,12 @@ function getErrorMessage(
 
 function EarningsOverviewComparisonField({
   labels,
+  onComparisonModeChange,
 }: {
   readonly labels: EarningsOverviewToolLabels;
+  readonly onComparisonModeChange: (value: string) => void;
 }) {
-  const { values, setValue } = useEarningsOverviewTool();
+  const { values } = useEarningsOverviewTool();
   const options = [
     { value: 'per-minute', label: labels.perMinuteOption },
     { value: 'elapsed-15', label: labels.elapsed15Option },
@@ -473,7 +641,7 @@ function EarningsOverviewComparisonField({
       <select
         id="earnings-overview-comparison-mode"
         value={values.comparisonMode}
-        onChange={(event) => setValue('comparisonMode', event.target.value)}
+        onChange={(event) => onComparisonModeChange(event.target.value)}
         className="flex h-[var(--cco-input-height)] w-full min-w-0 rounded-[var(--cco-input-radius)] border border-input bg-background px-[var(--cco-input-padding-x)] py-[var(--cco-input-padding-y)] text-base outline-none transition-[color,box-shadow] duration-[var(--cco-duration-fast)] focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 md:text-sm"
       >
         {options.map((option) => (
@@ -554,18 +722,183 @@ function formatWhole(formatNumber: NumberFormatter, value: number) {
   return formatNumber(value, { maximumFractionDigits: 0 });
 }
 
+function MixedCrushingManualControls({
+  locale,
+  formatNumber,
+  counts,
+  committedCounts,
+  mode,
+  issue,
+  baseTimeBudgetSeconds,
+  onCountChange,
+  onUseRecommended,
+}: {
+  readonly locale: Locale;
+  readonly formatNumber: NumberFormatter;
+  readonly counts: MixedCrushingCountInputs;
+  readonly committedCounts: MixedCrushingCounts;
+  readonly mode: MixedCrushingMode;
+  readonly issue: 'count' | 'time' | null;
+  readonly baseTimeBudgetSeconds: number;
+  readonly onCountChange: (counts: MixedCrushingCountInputs) => void;
+  readonly onUseRecommended: () => void;
+}) {
+  const labels = mixedCrushingUiLabels[locale];
+  const parsedDraft = parseMixedCrushingCountInputs(counts);
+  const dynamicCounts = parsedDraft ?? committedCounts;
+  const usedBaseSeconds = parsedDraft
+    ? getMixedCrushingBaseSeconds(parsedDraft, mixedCrushingUnitSeconds)
+    : getMixedCrushingBaseSeconds(committedCounts, mixedCrushingUnitSeconds);
+  const typeLabels: Readonly<Record<MixedCrushingTypeKey, string>> = {
+    medical: labels.medical,
+    ammunition: labels.ammunition,
+    military: labels.military,
+  };
+  const errorMessage = issue === 'count'
+    ? formatMixedCrushingMessage(labels.invalidCount, { max: 1_000 })
+    : issue === 'time'
+      ? formatMixedCrushingMessage(labels.overBudget, {
+          used: usedBaseSeconds ?? '—',
+          budget: baseTimeBudgetSeconds,
+        })
+      : null;
+
+  return (
+    <details
+      className="rounded-[var(--cco-card-radius)] border border-border bg-card px-4 py-3"
+      data-mixed-crushing-controls="true"
+      data-mixed-crushing-mode={mode}
+    >
+      <summary className="cursor-pointer rounded-sm py-1 text-sm font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/30">
+        {labels.manualControls}
+      </summary>
+      <div className="mt-4 space-y-4">
+        <p className="text-sm text-muted-foreground">{labels.stateHint}</p>
+        {mixedCrushingTypeKeys.map((type) => {
+          const inputId = `earnings-overview-mixed-${type}-count`;
+          const sliderId = `${inputId}-slider`;
+          const dynamicMax = getMixedCrushingDynamicMax(
+            dynamicCounts,
+            type,
+            baseTimeBudgetSeconds,
+            mixedCrushingUnitSeconds,
+          );
+          const rawCount = counts[type];
+          const numericCount = /^\d+$/.test(rawCount) ? Number(rawCount) : 0;
+          const sliderValue = Math.min(numericCount, dynamicMax);
+
+          return (
+            <div key={type} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_8rem] sm:items-end">
+              <div className="min-w-0 space-y-2">
+                <label htmlFor={inputId} className="text-sm font-medium text-foreground">
+                  {typeLabels[type]}
+                </label>
+                <input
+                  id={sliderId}
+                  type="range"
+                  min={0}
+                  max={dynamicMax}
+                  step={1}
+                  value={sliderValue}
+                  aria-label={`${typeLabels[type]} ${labels.count}`}
+                  aria-describedby={errorMessage ? 'earnings-overview-mixed-error' : undefined}
+                  aria-invalid={issue !== null}
+                  data-mixed-crushing-slider={type}
+                  onChange={(event) => onCountChange({
+                    ...counts,
+                    [type]: event.target.value,
+                  })}
+                  className="h-6 w-full cursor-pointer accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
+                />
+              </div>
+              <div className="space-y-2">
+                <label htmlFor={inputId} className="text-xs text-muted-foreground">
+                  {labels.count} · 0–{formatWhole(formatNumber, dynamicMax)}
+                </label>
+                <input
+                  id={inputId}
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  max={dynamicMax}
+                  step={1}
+                  value={rawCount}
+                  aria-describedby={errorMessage ? 'earnings-overview-mixed-error' : undefined}
+                  aria-invalid={issue !== null}
+                  data-mixed-crushing-number={type}
+                  onChange={(event) => onCountChange({
+                    ...counts,
+                    [type]: event.target.value,
+                  })}
+                  className="flex h-[var(--cco-input-height)] w-full min-w-0 rounded-[var(--cco-input-radius)] border border-input bg-background px-[var(--cco-input-padding-x)] py-[var(--cco-input-padding-y)] text-base outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 md:text-sm"
+                />
+              </div>
+            </div>
+          );
+        })}
+        {errorMessage ? (
+          <p
+            id="earnings-overview-mixed-error"
+            className="text-sm text-destructive"
+            role="alert"
+            aria-live="polite"
+            data-mixed-crushing-validation={issue}
+          >
+            {errorMessage}
+          </p>
+        ) : null}
+        {mode !== 'recommended' || issue !== null ? (
+          <button
+            type="button"
+            className="rounded-sm text-sm font-medium text-primary underline decoration-dotted underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
+            data-mixed-crushing-use-recommended="true"
+            onClick={onUseRecommended}
+          >
+            {labels.useRecommended}
+          </button>
+        ) : null}
+      </div>
+    </details>
+  );
+}
+
 export function EarningsOverviewResultTable({
   labels,
   locale,
   result,
+  mixedCrushingResult = null,
   formatNumber,
 }: {
   readonly labels: EarningsOverviewToolLabels;
   readonly locale: Locale;
   readonly result: EarningsCalculation;
+  readonly mixedCrushingResult?: MixedCrushingResult | null;
   readonly formatNumber: NumberFormatter;
 }) {
   const isElapsedMode = result.comparisonMode !== 'per-minute';
+  const mixedLabels = mixedCrushingUiLabels[locale];
+  const mixedValue = getMixedCrushingComparisonValue(
+    mixedCrushingResult,
+    result.comparisonMode,
+  );
+  const rows: Array<
+    | { readonly kind: 'activity'; readonly order: number; readonly value: number | null; readonly activity: EarningsActivityResult }
+    | { readonly kind: 'mixed'; readonly order: number; readonly value: number | null }
+  > = [
+    ...result.activities.map((activity, order) => ({
+      kind: 'activity' as const,
+      order,
+      value: isElapsedMode ? activity.elapsed?.totalNetAi ?? null : activity.aiPerMinute,
+      activity,
+    })),
+    { kind: 'mixed', order: result.activities.length, value: mixedValue },
+  ];
+  rows.sort((left, right) => {
+    if (left.value === null && right.value === null) return left.order - right.order;
+    if (left.value === null) return 1;
+    if (right.value === null) return -1;
+    return right.value - left.value || left.order - right.order;
+  });
 
   return (
     <div
@@ -603,7 +936,119 @@ export function EarningsOverviewResultTable({
           </tr>
         </thead>
         <tbody>
-          {result.activities.map((activityResult) => {
+          {rows.map((row) => {
+            if (row.kind === 'mixed') {
+              const counts = mixedCrushingResult?.counts;
+              const composition = counts
+                ? formatMixedCrushingMessage(mixedLabels.composition, {
+                    medical: formatWhole(formatNumber, counts.medical),
+                    ammunition: formatWhole(formatNumber, counts.ammunition),
+                    military: formatWhole(formatNumber, counts.military),
+                  })
+                : labels.notAvailable;
+              const output = mixedCrushingResult === null
+                ? labels.notAvailable
+                : `${mixedLabels.output}: ${formatNumber(
+                    mixedCrushingResult.outputTechScrap,
+                    { maximumFractionDigits: 1 },
+                  )}`;
+              const displayedNet = mixedCrushingResult?.totalNetAi ?? null;
+              const rate = mixedCrushingResult?.aiPerMinute ?? null;
+              const isNegativeNet = displayedNet !== null && displayedNet < 0;
+              const isNegativeRate = rate !== null && rate < 0;
+
+              return (
+                <tr
+                  key="crush-mixed"
+                  className="border-b border-border last:border-b-0"
+                  data-earnings-overview-mixed-crushing="true"
+                >
+                  <th scope="row" className="px-4 py-3 font-medium text-foreground">
+                    {mixedLabels.activity}
+                    {mixedCrushingResult ? (
+                      <span className="ml-2 text-xs font-normal text-muted-foreground">
+                        {mixedCrushingResult.source === 'recommended'
+                          ? mixedLabels.recommended
+                          : mixedLabels.manual}
+                      </span>
+                    ) : null}
+                    <span className="mt-1 block text-xs font-normal leading-5 text-muted-foreground">
+                      {composition}
+                    </span>
+                    <span className="block text-xs font-normal leading-5 text-muted-foreground">
+                      {output}
+                    </span>
+                    {mixedCrushingResult?.source === 'recommended'
+                      && !mixedCrushingResult.isRecommended ? (
+                        <span className="block text-xs font-normal leading-5 text-muted-foreground">
+                          {mixedLabels.noRecommendation}
+                        </span>
+                      ) : null}
+                  </th>
+                  {isElapsedMode ? (
+                    <>
+                      <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
+                        {mixedCrushingResult
+                          ? `${formatWhole(formatNumber, mixedCrushingResult.totalCount)} ${mixedLabels.timesUnit}`
+                          : labels.notAvailable}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
+                        {mixedCrushingResult
+                          ? `${formatMinutes(formatNumber, mixedCrushingResult.actualSeconds / 60)} ${labels.minutesUnit}`
+                          : labels.notAvailable}
+                      </td>
+                      <td className={`whitespace-nowrap px-4 py-3 font-medium ${isNegativeNet
+                        ? 'text-destructive'
+                        : 'text-foreground'}`}
+                      >
+                        {displayedNet === null
+                          ? labels.notAvailable
+                          : `${formatDecimal(formatNumber, displayedNet)} ${labels.aiUnit}`}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 font-medium text-foreground">
+                        {mixedCrushingResult
+                          ? `${formatNumber(mixedCrushingResult.timeUtilizationPercent, {
+                              minimumFractionDigits: 1,
+                              maximumFractionDigits: 1,
+                            })} ${labels.percentUnit}`
+                          : labels.notAvailable}
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
+                        {mixedCrushingResult
+                          ? `${formatWhole(formatNumber, mixedCrushingResult.totalCount)} ${mixedLabels.timesUnit}`
+                          : labels.notAvailable}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
+                        {mixedCrushingResult
+                          ? `${formatMinutes(formatNumber, mixedCrushingResult.actualSeconds / 60)} ${labels.minutesUnit}`
+                          : labels.notAvailable}
+                      </td>
+                      <td className={`whitespace-nowrap px-4 py-3 font-medium ${isNegativeNet
+                        ? 'text-destructive'
+                        : 'text-foreground'}`}
+                      >
+                        {displayedNet === null
+                          ? labels.notAvailable
+                          : `${formatDecimal(formatNumber, displayedNet)} ${labels.aiUnit}`}
+                      </td>
+                      <td className={`whitespace-nowrap px-4 py-3 font-medium ${isNegativeRate
+                        ? 'text-destructive'
+                        : 'text-foreground'}`}
+                      >
+                        {rate === null
+                          ? labels.notAvailable
+                          : `${formatDecimal(formatNumber, rate)} ${labels.aiUnit}`}
+                      </td>
+                    </>
+                  )}
+                </tr>
+              );
+            }
+
+            const activityResult = row.activity;
             const activity = earningsActivityCatalog.find(
               (candidate) => candidate.id === activityResult.id,
             );
@@ -707,13 +1152,95 @@ export function EarningsOverviewCalculator({
     inputs,
     prices,
     result,
+    values,
+    mixedCrushingResult,
+    mixedCrushingIssue,
+    mixedCrushingCounts,
+    mixedCrushingBaseTimeBudgetSeconds,
+    setMixedCrushingCounts,
+    setMixedCrushingMode,
+    setValue,
     fillFromShared,
   } = useEarningsOverviewTool();
+  const [mixedCrushingDraft, setMixedCrushingDraft] = useState<{
+    readonly comparisonMode: EarningsComparisonMode;
+    readonly counts: MixedCrushingCountInputs;
+  } | null>(null);
+  const activeMixedCrushingDraftCounts = mixedCrushingDraft?.comparisonMode
+      === values.comparisonMode
+    ? mixedCrushingDraft.counts
+    : null;
   const formatNumber = useMemo(
     () => numberFormatter ?? createNumberFormatter(locale),
     [locale, numberFormatter],
   );
   const hasErrors = Object.keys(errors).length > 0;
+  const storedCountInputs: MixedCrushingCountInputs = {
+    medical: values.mixedMedicalCount,
+    ammunition: values.mixedAmmunitionCount,
+    military: values.mixedMilitaryCount,
+  };
+  const displayedMixedResult = activeMixedCrushingDraftCounts === null
+    ? mixedCrushingResult
+    : (() => {
+        const counts = parseMixedCrushingCountInputs(activeMixedCrushingDraftCounts);
+        const issue = counts === null
+          ? 'count'
+          : validateMixedCrushingCounts(
+              counts,
+              mixedCrushingBaseTimeBudgetSeconds,
+              mixedCrushingUnitSeconds,
+            );
+        return issue === null && result && counts
+          ? calculateManualMixedCrushing(result, counts)
+          : null;
+      })();
+  const displayedMixedIssue = activeMixedCrushingDraftCounts === null
+    ? mixedCrushingIssue
+    : (() => {
+        const counts = parseMixedCrushingCountInputs(activeMixedCrushingDraftCounts);
+        return counts === null
+          ? 'count'
+          : validateMixedCrushingCounts(
+              counts,
+              mixedCrushingBaseTimeBudgetSeconds,
+              mixedCrushingUnitSeconds,
+            );
+      })();
+  const displayedMixedCounts = activeMixedCrushingDraftCounts
+    ?? (values.mixedCrushingMode === 'manual'
+      ? storedCountInputs
+      : {
+          medical: String(mixedCrushingResult?.counts.medical ?? 0),
+          ammunition: String(mixedCrushingResult?.counts.ammunition ?? 0),
+          military: String(mixedCrushingResult?.counts.military ?? 0),
+        });
+
+  const handleMixedCrushingCountChange = (countInputs: MixedCrushingCountInputs) => {
+    setMixedCrushingDraft({ comparisonMode: values.comparisonMode, counts: countInputs });
+    const counts = parseMixedCrushingCountInputs(countInputs);
+    if (
+      counts !== null
+      && validateMixedCrushingCounts(
+        counts,
+        mixedCrushingBaseTimeBudgetSeconds,
+        mixedCrushingUnitSeconds,
+      ) === null
+    ) {
+      setMixedCrushingCounts(counts);
+    }
+  };
+
+  const handleUseRecommendedMixedCrushing = () => {
+    setMixedCrushingDraft(null);
+    setMixedCrushingMode('recommended');
+  };
+
+  const handleComparisonModeChange = (mode: string) => {
+    if (!isEarningsComparisonMode(mode) || mode === values.comparisonMode) return;
+    setMixedCrushingDraft(null);
+    setValue('comparisonMode', mode);
+  };
 
   return (
     <div className="not-prose my-8 space-y-6" data-tool="earnings-overview">
@@ -765,7 +1292,10 @@ export function EarningsOverviewCalculator({
                 label={labels.btcBuffPercent}
                 labels={labels}
               />
-              <EarningsOverviewComparisonField labels={labels} />
+              <EarningsOverviewComparisonField
+                labels={labels}
+                onComparisonModeChange={handleComparisonModeChange}
+              />
             </div>
           </div>
           <p className="border-t border-border pt-5 text-xs leading-5 text-muted-foreground">
@@ -773,6 +1303,18 @@ export function EarningsOverviewCalculator({
           </p>
         </CardContent>
       </Card>
+
+      <MixedCrushingManualControls
+        locale={locale}
+        formatNumber={formatNumber}
+        counts={displayedMixedCounts}
+        committedCounts={mixedCrushingCounts}
+        mode={values.mixedCrushingMode}
+        issue={displayedMixedIssue}
+        baseTimeBudgetSeconds={mixedCrushingBaseTimeBudgetSeconds}
+        onCountChange={handleMixedCrushingCountChange}
+        onUseRecommended={handleUseRecommendedMixedCrushing}
+      />
 
       <div>
         <div className="mb-4">
@@ -783,6 +1325,7 @@ export function EarningsOverviewCalculator({
             labels={labels}
             locale={locale}
             result={result}
+            mixedCrushingResult={displayedMixedResult}
             formatNumber={formatNumber}
           />
         ) : (
@@ -797,6 +1340,7 @@ export function EarningsOverviewCalculator({
           inputs={inputs}
           prices={prices}
           comparisonMode={result.comparisonMode}
+          mixedCrushingResult={displayedMixedResult}
           numberFormatter={formatNumber}
         />
       ) : null}

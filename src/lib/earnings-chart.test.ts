@@ -8,6 +8,7 @@ import {
   type EarningsCalculation,
   type EarningsInputs,
 } from './earnings-calculator';
+import { calculateManualMixedCrushing } from './mixed-crushing-calculator';
 import {
   deriveEarningsChartData,
   defaultEarningsChartGroupId,
@@ -20,6 +21,7 @@ import {
   getEarningsChartYScaleTicks,
   getEarningsChartCalloutPosition,
   getFixedEarningsChartRows,
+  mixedCrushingChartActivityId,
   type EarningsChartData,
   type EarningsChartPoint,
 } from './earnings-chart';
@@ -59,9 +61,12 @@ describe('Earnings chart data', () => {
       'fixed',
     ]);
     expect(new Set(earningsChartGroups.flatMap((group) => group.activityIds))).toEqual(
-      new Set(earningsActivityCatalog.map((activity) => activity.id)),
+      new Set([
+        ...earningsActivityCatalog.map((activity) => activity.id),
+        mixedCrushingChartActivityId,
+      ]),
     );
-    expect(earningsChartGroups.map((group) => group.activityIds.length)).toEqual([8, 9]);
+    expect(earningsChartGroups.map((group) => group.activityIds.length)).toEqual([8, 10]);
     expect(defaultEarningsChartVisibleActivityIds).toEqual([
       'search',
       'mining',
@@ -74,10 +79,11 @@ describe('Earnings chart data', () => {
     expect(perMinuteData.points).toHaveLength(800);
     expect(perMinuteData.points[0]?.level).toBe(1);
     expect(perMinuteData.points.at(-1)?.level).toBe(800);
-    expect(perMinuteData.activityIds).toEqual(
-      earningsActivityCatalog.map((activity) => activity.id),
-    );
-    expect(perMinuteData.activityIds).toHaveLength(16);
+    expect(perMinuteData.activityIds).toEqual([
+      ...earningsActivityCatalog.map((activity) => activity.id),
+      mixedCrushingChartActivityId,
+    ]);
+    expect(perMinuteData.activityIds).toHaveLength(17);
   });
 
   it('每個 X 等級同時套用搜索、分子列印與挖礦等級', () => {
@@ -120,19 +126,62 @@ describe('Earnings chart data', () => {
       .toBe(getResult(elapsedExpected, 'search').elapsed?.totalNetAi);
   });
 
-  it('固定收益活動保持水平線，代表點資料可排序為九列', () => {
+  it('固定收益活動保持水平線，代表點資料可排序為十列', () => {
     for (const activityId of fixedEarningsChartActivityIds) {
       const values = perMinuteData.points.map((point) => point.values[activityId]);
       expect(new Set(values).size).toBe(1);
     }
 
     const rows = getFixedEarningsChartRows(perMinuteData);
-    expect(rows).toHaveLength(9);
+    const calculation = calculateEarnings(inputs, prices, { comparisonMode: 'per-minute' })!;
+    for (const activityId of fixedEarningsChartActivityIds.filter((id) => id.startsWith('pack-'))) {
+      if (activityId === mixedCrushingChartActivityId) continue;
+      expect(perMinuteData.points[0]?.values[activityId])
+        .toBe(getResult(calculation, activityId).aiPerMinute);
+    }
+    expect(rows).toHaveLength(10);
     expect(rows.every((row, index) => index === 0 || (
       row.value === null
       || rows[index - 1]?.value === null
       || (rows[index - 1]?.value ?? Number.NEGATIVE_INFINITY) >= row.value
     ))).toBe(true);
+  });
+
+  it('固定混合壓碎列依比較模式顯示同一手動組合，且跨 800 等級保持不變', () => {
+    const counts = { medical: 2, ammunition: 3, military: 4 };
+    const perMinuteCalculation = calculateEarnings(inputs, prices, {
+      comparisonMode: 'per-minute',
+    })!;
+    const perMinuteMixed = calculateManualMixedCrushing(perMinuteCalculation, counts)!;
+    const perMinuteChart = deriveEarningsChartData(
+      inputs,
+      prices,
+      'per-minute',
+      perMinuteMixed,
+    );
+
+    expect(new Set(perMinuteChart.points.map((point) =>
+      point.values[mixedCrushingChartActivityId])))
+      .toEqual(new Set([perMinuteMixed.aiPerMinute]));
+    expect(getFixedEarningsChartRows(perMinuteChart).find((row) =>
+      row.activityId === mixedCrushingChartActivityId)?.value)
+      .toBe(perMinuteMixed.aiPerMinute);
+
+    const elapsedCalculation = calculateEarnings(inputs, prices, {
+      comparisonMode: 'elapsed-105',
+    })!;
+    const elapsedMixed = calculateManualMixedCrushing(elapsedCalculation, counts)!;
+    const elapsedChart = deriveEarningsChartData(
+      inputs,
+      prices,
+      'elapsed-105',
+      elapsedMixed,
+    );
+    expect(new Set(elapsedChart.points.map((point) =>
+      point.values[mixedCrushingChartActivityId])))
+      .toEqual(new Set([elapsedMixed.totalNetAi]));
+    expect(elapsedChart.points[799]?.values[mixedCrushingChartActivityId])
+      .toBe(elapsedMixed.totalNetAi);
   });
 
   it('AI 製作負值不擴大範圍，但其他活動負值仍參與計算', () => {
@@ -255,6 +304,7 @@ describe('Fixed earnings rows and line hover helpers', () => {
         'pack-fanny-pack': 5,
         'pack-explorer-backpack': -2,
         'pack-employee-office-case': null,
+        'crush-mixed': null,
       } as EarningsChartPoint['values'],
     }]);
 
@@ -267,6 +317,7 @@ describe('Fixed earnings rows and line hover helpers', () => {
       { activityId: 'pack-explorer-backpack', value: -2 },
       { activityId: 'crush-medical', value: -4 },
       { activityId: 'yellow-box', value: null },
+      { activityId: 'crush-mixed', value: null },
       { activityId: 'pack-employee-office-case', value: null },
     ]);
   });

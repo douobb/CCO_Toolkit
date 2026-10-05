@@ -122,6 +122,7 @@
       "inputQuantity": 100,
       "outputItemId": "old-pouch",
       "outputQuantity": 1,
+      "unitBtcCost": 500,
       "batchSize": 24,
       "baseUnitSeconds": 300,
       "verification": "confirmed"
@@ -134,6 +135,7 @@
       "inputQuantity": 10,
       "outputItemId": "fanny-pack",
       "outputQuantity": 1,
+      "unitBtcCost": 5000,
       "batchSize": 24,
       "baseUnitSeconds": 900,
       "verification": "confirmed"
@@ -146,6 +148,7 @@
       "inputQuantity": 15,
       "outputItemId": "explorer-backpack",
       "outputQuantity": 1,
+      "unitBtcCost": 5000,
       "batchSize": 24,
       "baseUnitSeconds": 1800,
       "verification": "confirmed"
@@ -158,6 +161,7 @@
       "inputQuantity": 20,
       "outputItemId": "employee-office-case",
       "outputQuantity": 1,
+      "unitBtcCost": 50000,
       "batchSize": 24,
       "baseUnitSeconds": 2700,
       "verification": "confirmed"

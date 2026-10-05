@@ -15,7 +15,7 @@ describe('loot box calculator', () => {
     const net = expectedLootBoxNetAi('white', prices);
 
     expect(gross).toBeTypeOf('number');
-    expect(cost).toBe(3000 / 8150 + 32 * 110 / 1000);
+    expect(cost).toBe(3000 / 8450 + 32 * 110 / 1000);
     expect(net).toBe(gross! - cost!);
   });
 

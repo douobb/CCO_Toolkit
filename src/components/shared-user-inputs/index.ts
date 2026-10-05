@@ -5,7 +5,10 @@ export {
   useSharedUserInputsStore,
 } from './shared-user-inputs-react';
 export { SharedUserInputsManager } from './shared-user-inputs-manager';
-export type { SharedUserInputsManagerLabels } from './shared-user-inputs-manager';
+export type {
+  SharedUserInputsManagerLabels,
+  SharedUserInputsManagerMode,
+} from './shared-user-inputs-manager';
 export {
   createDefaultSharedEquipmentDraft,
   createSharedUserInputsDraft,

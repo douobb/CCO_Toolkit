@@ -64,7 +64,7 @@ describe('loot box analysis', () => {
     expect(analysis.openings).toBe(1);
     expect(analysis.actualGrossAi).toBe(16 * 1.85 + 2);
     expect(analysis.actualNetAi).toBe(
-      analysis.actualGrossAi! - (3000 / 8150 + 32 * 110 / 1000),
+      analysis.actualGrossAi! - (3000 / 8450 + 32 * 110 / 1000),
     );
     expect(analysis.drops.find((drop) => drop.dropId === 'item-hash')).toMatchObject({
       actualQuantity: 16,

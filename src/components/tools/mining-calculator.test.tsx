@@ -297,7 +297,7 @@ describe('Mining calculator presentation', () => {
       { id: 'btc-per-ai', value: 9000 },
     ]);
 
-    const restoredRate = updateMiningSharedValue(withRateOverride, 'btcPerAi', 8150);
+    const restoredRate = updateMiningSharedValue(withRateOverride, 'btcPerAi', 8450);
     expect(restoredRate.economy.exchangeRates).toEqual([]);
   });
 

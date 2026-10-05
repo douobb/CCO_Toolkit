@@ -44,6 +44,7 @@ const stableIdentifierSchema = z
   .regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/, '穩定 ID 只能使用小寫英數字與連字號');
 const positiveIntegerSchema = z.number().int().positive();
 const positiveFiniteSchema = z.number().finite().positive();
+const nonNegativeFiniteSchema = z.number().finite().nonnegative();
 
 const activityBaseShape = {
   id: stableIdentifierSchema,
@@ -90,6 +91,8 @@ const conversionActivitySchema = z
     inputQuantity: positiveFiniteSchema,
     outputItemId: stableIdentifierSchema,
     outputQuantity: positiveFiniteSchema,
+    /** 每個操作單位支付的 BTC 製作費；舊資料及未收費活動預設為 0。 */
+    unitBtcCost: nonNegativeFiniteSchema.default(0),
   })
   .strict();
 

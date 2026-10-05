@@ -16,7 +16,7 @@ describe('mining calculator', () => {
   it('依規格在基礎公式明示的位置取 ceil', () => {
     expect(miningDefaults).toMatchObject({
       aiPerHash: 1.85,
-      btcPerAi: 8_150,
+      btcPerAi: 8_450,
       aiPerThousandTechScrap: 110,
     });
     expect(miningBaseExp(1)).toBe(102);
@@ -43,7 +43,7 @@ describe('mining calculator', () => {
     const result = calculateMining({
       miningLevel: 400,
       aiPerHash: 1.85,
-      btcPerAi: 8_150,
+      btcPerAi: 8_450,
       aiPerThousandTechScrap: 110,
       cortexBonusPercent: 0,
       tradeExploitPercent: 0,

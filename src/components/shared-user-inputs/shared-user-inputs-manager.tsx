@@ -43,7 +43,7 @@ import type { Locale } from '@/lib/i18n';
 
 import { useSharedUserInputs, useSharedUserInputsStore } from './shared-user-inputs-react';
 import {
-  createDefaultSharedPriceDrafts,
+  createDefaultSharedMarketDrafts,
   createSharedUserInputsDraft,
   getSharedLevelInputMaximum,
   validateSharedUserInputsDraft,
@@ -82,6 +82,8 @@ export interface SharedUserInputsManagerLabels {
   validationSummary: string;
   invalidValue: string;
 }
+
+export type SharedUserInputsManagerMode = 'full' | 'quick';
 
 function formatTemplate(
   template: string,
@@ -242,9 +244,13 @@ function Section({
 export function SharedUserInputsManager({
   labels,
   locale,
+  mode = 'full',
+  idPrefix,
 }: {
   labels: SharedUserInputsManagerLabels;
   locale: Locale;
+  mode?: SharedUserInputsManagerMode;
+  idPrefix?: string;
 }) {
   const snapshot = useSharedUserInputs();
   const store = useSharedUserInputsStore();
@@ -278,20 +284,31 @@ export function SharedUserInputsManager({
   );
 
   const restoreDefaultPrices = useCallback(() => {
+    const defaults = createDefaultSharedMarketDrafts();
     commit({
       ...draft,
-      prices: createDefaultSharedPriceDrafts(),
+      prices: defaults.prices,
+      exchangeRates: defaults.exchangeRates,
+      cacheRates: defaults.cacheRates,
     });
   }, [commit, draft]);
 
   const fieldError = (path: string) =>
     errors[path] ? labels.invalidValue : undefined;
+  const fieldId = (id: string) => idPrefix ? `${idPrefix}-${id}` : id;
   const draftBtcPerAi = getDraftBtcPerAi(draft, resolvedBtcPerAi);
 
   let skillIndex = 0;
 
   return (
-    <div className="space-y-6" data-testid="shared-user-inputs-manager">
+    <div
+      className={cn(
+        'space-y-6',
+        mode === 'quick' && '[&_input]:min-h-11 [&_button]:min-h-11 [&_button]:min-w-11',
+      )}
+      data-testid="shared-user-inputs-manager"
+      data-mode={mode}
+    >
       {Object.keys(errors).length > 0 ? (
         <p
           role="alert"
@@ -311,7 +328,7 @@ export function SharedUserInputsManager({
             const path = isPlayerLevel
               ? 'progression.player.level'
               : `progression.skills.${skillIndex++}.level`;
-            const id = `shared-level-${level.id}`;
+            const id = fieldId(`shared-level-${level.id}`);
             const maximum = getSharedLevelInputMaximum(draft, level.id);
             const range = formatTemplate(labels.rangeHint, {
               min: definition.range.min,
@@ -357,13 +374,13 @@ export function SharedUserInputsManager({
       <Section title={labels.equipmentTitle}>
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           <Field
-            id="shared-equipment-bargain-percent"
+            id={fieldId('shared-equipment-bargain-percent')}
             label={labels.bargainPercent}
             range={formatTemplate(labels.rangeHint, { min: 0, max: 40 })}
             error={fieldError('equipment.bargainPercent')}
           >
             <InputWithUnit
-              id="shared-equipment-bargain-percent"
+              id={fieldId('shared-equipment-bargain-percent')}
               type="number"
               inputMode="numeric"
               min="0"
@@ -382,20 +399,20 @@ export function SharedUserInputsManager({
               }
               aria-invalid={Boolean(fieldError('equipment.bargainPercent'))}
               aria-describedby={getFieldDescribedBy(
-                'shared-equipment-bargain-percent',
+                fieldId('shared-equipment-bargain-percent'),
                 fieldError('equipment.bargainPercent'),
               )}
             />
           </Field>
 
           <Field
-            id="shared-equipment-max-health"
+            id={fieldId('shared-equipment-max-health')}
             label={labels.maxHealth}
             range={labels.nonNegativeRange}
             error={fieldError('equipment.maxHealth')}
           >
             <InputWithUnit
-              id="shared-equipment-max-health"
+              id={fieldId('shared-equipment-max-health')}
               type="number"
               inputMode="numeric"
               min="0"
@@ -410,20 +427,20 @@ export function SharedUserInputsManager({
               }
               aria-invalid={Boolean(fieldError('equipment.maxHealth'))}
               aria-describedby={getFieldDescribedBy(
-                'shared-equipment-max-health',
+                fieldId('shared-equipment-max-health'),
                 fieldError('equipment.maxHealth'),
               )}
             />
           </Field>
 
           <Field
-            id="shared-equipment-armor"
+            id={fieldId('shared-equipment-armor')}
             label={labels.armor}
             range={labels.nonNegativeRange}
             error={fieldError('equipment.armor')}
           >
             <InputWithUnit
-              id="shared-equipment-armor"
+              id={fieldId('shared-equipment-armor')}
               type="number"
               inputMode="numeric"
               min="0"
@@ -438,20 +455,20 @@ export function SharedUserInputsManager({
               }
               aria-invalid={Boolean(fieldError('equipment.armor'))}
               aria-describedby={getFieldDescribedBy(
-                'shared-equipment-armor',
+                fieldId('shared-equipment-armor'),
                 fieldError('equipment.armor'),
               )}
             />
           </Field>
 
           <Field
-            id="shared-equipment-destructive-weapon-damage"
+            id={fieldId('shared-equipment-destructive-weapon-damage')}
             label={labels.destructiveWeaponDamage}
             range={labels.positiveRange}
             error={fieldError('equipment.destructiveWeaponDamage')}
           >
             <InputWithUnit
-              id="shared-equipment-destructive-weapon-damage"
+              id={fieldId('shared-equipment-destructive-weapon-damage')}
               type="number"
               inputMode="numeric"
               min="1"
@@ -469,14 +486,14 @@ export function SharedUserInputsManager({
               }
               aria-invalid={Boolean(fieldError('equipment.destructiveWeaponDamage'))}
               aria-describedby={getFieldDescribedBy(
-                'shared-equipment-destructive-weapon-damage',
+                fieldId('shared-equipment-destructive-weapon-damage'),
                 fieldError('equipment.destructiveWeaponDamage'),
               )}
             />
           </Field>
 
           <Field
-            id="shared-equipment-critical-damage-percent"
+            id={fieldId('shared-equipment-critical-damage-percent')}
             label={labels.criticalDamagePercent}
             range={formatTemplate(labels.rangeHint, {
               min: SHARED_CRITICAL_DAMAGE_PERCENT_MIN,
@@ -485,7 +502,7 @@ export function SharedUserInputsManager({
             error={fieldError('equipment.criticalDamagePercent')}
           >
             <InputWithUnit
-              id="shared-equipment-critical-damage-percent"
+              id={fieldId('shared-equipment-critical-damage-percent')}
               type="number"
               inputMode="numeric"
               min={String(SHARED_CRITICAL_DAMAGE_PERCENT_MIN)}
@@ -504,20 +521,20 @@ export function SharedUserInputsManager({
               }
               aria-invalid={Boolean(fieldError('equipment.criticalDamagePercent'))}
               aria-describedby={getFieldDescribedBy(
-                'shared-equipment-critical-damage-percent',
+                fieldId('shared-equipment-critical-damage-percent'),
                 fieldError('equipment.criticalDamagePercent'),
               )}
             />
           </Field>
 
           <Field
-            id="shared-equipment-damage-reduction-percent"
+            id={fieldId('shared-equipment-damage-reduction-percent')}
             label={labels.damageReductionPercent}
             range={formatTemplate(labels.rangeHint, { min: 0, max: 100 })}
             error={fieldError('equipment.damageReductionPercent')}
           >
             <InputWithUnit
-              id="shared-equipment-damage-reduction-percent"
+              id={fieldId('shared-equipment-damage-reduction-percent')}
               type="number"
               inputMode="numeric"
               min="0"
@@ -536,7 +553,7 @@ export function SharedUserInputsManager({
               }
               aria-invalid={Boolean(fieldError('equipment.damageReductionPercent'))}
               aria-describedby={getFieldDescribedBy(
-                'shared-equipment-damage-reduction-percent',
+                fieldId('shared-equipment-damage-reduction-percent'),
                 fieldError('equipment.damageReductionPercent'),
               )}
             />
@@ -590,7 +607,7 @@ export function SharedUserInputsManager({
                 );
                 if (!definition) return null;
                 const item = getEconomyItemDefinition(definition.itemId);
-                const id = `shared-price-${price.itemId}`;
+                const id = fieldId(`shared-price-${price.itemId}`);
                 const path = `economy.prices.${index}.amount`;
                 const displayAmount = getDisplayedMarketPriceAmount(
                   price,
@@ -658,7 +675,7 @@ export function SharedUserInputsManager({
                   const quoteCurrency = getEconomyCurrencyDefinition(
                     definition.quoteCurrencyId,
                   );
-                  const id = `shared-exchange-${rate.id}`;
+                  const id = fieldId(`shared-exchange-${rate.id}`);
                   const path = `economy.exchangeRates.${index}.value`;
 
                   return (
@@ -697,7 +714,7 @@ export function SharedUserInputsManager({
             </div>
           ) : null}
 
-          {marketCacheRateCatalog.length > 0 ? (
+          {mode === 'full' && marketCacheRateCatalog.length > 0 ? (
             <div className="space-y-4">
               <h3 className="text-base font-semibold text-foreground">
                 {labels.cacheRatesTitle}
@@ -708,7 +725,7 @@ export function SharedUserInputsManager({
                     (item) => item.id === rate.id,
                   );
                   if (!definition) return null;
-                  const id = `shared-cache-${rate.id}`;
+                  const id = fieldId(`shared-cache-${rate.id}`);
                   const path = `economy.cacheRates.${index}.value`;
 
                   return (
@@ -749,28 +766,30 @@ export function SharedUserInputsManager({
         </div>
       </Section>
 
-      <Card className="border-destructive/30">
-        <CardHeader>
-          <CardTitle>{labels.resetTitle}</CardTitle>
-          <CardDescription className="mt-2 leading-6">
-            {labels.resetDescription}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button
-            type="button"
-            variant="destructive"
-            onClick={() => {
-              store.reset();
-              setDraft(createSharedUserInputsDraft(store.getSnapshot()));
-              setErrors({});
-            }}
-          >
-            <RotateCcw aria-hidden="true" />
-            {labels.reset}
-          </Button>
-        </CardContent>
-      </Card>
+      {mode === 'full' ? (
+        <Card className="border-destructive/30">
+          <CardHeader>
+            <CardTitle>{labels.resetTitle}</CardTitle>
+            <CardDescription className="mt-2 leading-6">
+              {labels.resetDescription}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => {
+                store.reset();
+                setDraft(createSharedUserInputsDraft(store.getSnapshot()));
+                setErrors({});
+              }}
+            >
+              <RotateCcw aria-hidden="true" />
+              {labels.reset}
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   );
 }

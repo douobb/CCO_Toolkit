@@ -75,9 +75,9 @@ const dataUpdateBaselines = {
   },
   economy: {
     schemaVersion: '1.0.0',
-    dataVersion: 'cco-found-initial-snapshot',
-    updatedAt: '2026-08-28',
-    payloadSha256: 'c2b21a0b9e3b421a3333855acb72f8e4f36e4beb9355f1e0c6cc5ee16c07b604',
+    dataVersion: 'cco-found-price-update-2026-10-05',
+    updatedAt: '2026-10-05',
+    payloadSha256: '09dcbe21246eb8831a662efd53717c1cfdc6058ae0f9ac42f721a22f8b13f6e5',
   },
   effects: {
     schemaVersion: '1.0.0',
@@ -86,10 +86,10 @@ const dataUpdateBaselines = {
     payloadSha256: '59f0792d8c5cb848008eb27ff9ad25bb94887198fd6fe2f8212cb2adc393102a',
   },
   'earnings-activities': {
-    schemaVersion: '1.0.0',
-    dataVersion: 'cco-found-initial-snapshot',
-    updatedAt: '2026-09-19',
-    payloadSha256: '06fcdb63144421a0270d8f482334beb9ba926e9049d14c817483217daf40ba62',
+    schemaVersion: '1.1.0',
+    dataVersion: 'cco-found-pack-btc-cost-update-2026-10-05',
+    updatedAt: '2026-10-05',
+    payloadSha256: 'c94b6fa2b1ed08d0b9ac677b99fced3ce70f22e3963fae02b5f774cc1c3c1cb2',
   },
   'loot-boxes': {
     schemaVersion: '1.0.0',

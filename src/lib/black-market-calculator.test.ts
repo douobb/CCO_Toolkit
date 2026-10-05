@@ -26,7 +26,7 @@ describe('黑市收益計算核心', () => {
       cacheAmounts: defaultCacheAmounts,
       btcBuffPercent: 100,
       bargainPercent: 40,
-      aiPriceInBtc: 8_150,
+      aiPriceInBtc: 8_450,
       cachePerAi: defaultCacheRates,
     });
 
@@ -37,15 +37,15 @@ describe('黑市收益計算核心', () => {
       saleBtcPerCache: 1_176,
       soldBtc: 1_176_000,
       costAi: 111.11,
-      profitBtc: 270_453.5,
-      profitAi: 33.18,
-      breakEvenLevel: 363,
+      profitBtc: 237_120.5,
+      profitAi: 28.06,
+      breakEvenLevel: 380,
     });
     expect(results?.map((result) => result.breakEvenLevel)).toEqual([
-      363,
-      355,
-      386,
-      709,
+      380,
+      372,
+      403,
+      739,
     ]);
   });
 
@@ -60,7 +60,7 @@ describe('黑市收益計算核心', () => {
       },
       btcBuffPercent: 0,
       bargainPercent: 0,
-      aiPriceInBtc: 8_150,
+      aiPriceInBtc: 8_450,
       cachePerAi: defaultCacheRates,
     });
 
@@ -100,7 +100,7 @@ describe('黑市收益計算核心', () => {
       cacheAmounts: defaultCacheAmounts,
       btcBuffPercent: 0,
       bargainPercent: 0,
-      aiPriceInBtc: 8_150,
+      aiPriceInBtc: 8_450,
       cachePerAi: defaultCacheRates,
     })).toBeNull();
 
@@ -109,7 +109,7 @@ describe('黑市收益計算核心', () => {
       cacheAmounts: defaultCacheAmounts,
       btcBuffPercent: 0,
       bargainPercent: 41,
-      aiPriceInBtc: 8_150,
+      aiPriceInBtc: 8_450,
       cachePerAi: defaultCacheRates,
     })).toBeNull();
   });

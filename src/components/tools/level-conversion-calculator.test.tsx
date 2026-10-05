@@ -47,7 +47,7 @@ function defaultPrices() {
     aiPerAmmunitionTechParts: '100',
     aiPerMilitaryAmmunitionTechParts: '100',
     trashCachePerAi: '9',
-    btcPerAi: '8150',
+    btcPerAi: '8450',
   } as const;
 }
 

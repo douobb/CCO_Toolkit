@@ -74,6 +74,11 @@ export interface SharedUserInputsDraft {
   equipment: SharedEquipmentDraft;
 }
 
+export type SharedMarketDrafts = Pick<
+  SharedUserInputsDraft,
+  'prices' | 'exchangeRates' | 'cacheRates'
+>;
+
 /** 只保存錯誤路徑；使用者提示由目前語系的 UI 統一提供。 */
 export type SharedUserInputsDraftErrors = Readonly<Record<string, true>>;
 
@@ -85,13 +90,28 @@ function optionalNumberFromDraft(value: string): number | undefined {
   return value.trim() === '' ? undefined : Number(value);
 }
 
-/** 建立所有市場價格的資料目錄預設 draft，供初始化與批次恢復共用。 */
+/** 建立完整市場資料目錄預設 draft，供初始化與批次恢復共用。 */
+export function createDefaultSharedMarketDrafts(): SharedMarketDrafts {
+  return {
+    prices: marketPriceCatalog.map((definition) => ({
+      itemId: definition.itemId,
+      currencyId: definition.defaultBasisCurrencyId,
+      amount: String(definition.defaultBasisValue),
+    })),
+    exchangeRates: economyDataSet.payload.exchangeRates.map((definition) => ({
+      id: definition.id,
+      value: String(definition.defaultValue),
+    })),
+    cacheRates: marketCacheRateCatalog.map((definition) => ({
+      id: definition.id,
+      value: String(definition.defaultValue),
+    })),
+  };
+}
+
+/** 建立所有市場價格的資料目錄預設 draft。 */
 export function createDefaultSharedPriceDrafts(): SharedPriceDraft[] {
-  return marketPriceCatalog.map((definition) => ({
-    itemId: definition.itemId,
-    currencyId: definition.defaultBasisCurrencyId,
-    amount: String(definition.defaultBasisValue),
-  }));
+  return createDefaultSharedMarketDrafts().prices;
 }
 
 /** 建立裝備與戰鬥共用輸入的安全預設 draft。 */
@@ -140,6 +160,7 @@ export function createSharedUserInputsDraft(
   const storedCacheRates = snapshot.economy.cacheRates;
   const storedManualEffects = snapshot.effects.buffs;
   const storedEquipment = snapshot.equipment;
+  const defaultMarketDrafts = createDefaultSharedMarketDrafts();
   const defaultEquipment = createDefaultSharedEquipmentDraft();
 
   return {
@@ -157,7 +178,7 @@ export function createSharedUserInputsDraft(
         value: String(stored?.level ?? definition.defaultValue),
       };
     }),
-    prices: createDefaultSharedPriceDrafts().map((defaultPrice) => {
+    prices: defaultMarketDrafts.prices.map((defaultPrice) => {
       const stored = storedPrices.find((price) => price.itemId === defaultPrice.itemId);
       return {
         itemId: defaultPrice.itemId,
@@ -165,18 +186,18 @@ export function createSharedUserInputsDraft(
         amount: String(stored?.amount ?? defaultPrice.amount),
       };
     }),
-    exchangeRates: economyDataSet.payload.exchangeRates.map((definition) => {
-      const stored = storedExchangeRates.find((rate) => rate.id === definition.id);
+    exchangeRates: defaultMarketDrafts.exchangeRates.map((defaultRate) => {
+      const stored = storedExchangeRates.find((rate) => rate.id === defaultRate.id);
       return {
-        id: definition.id,
-        value: String(stored?.value ?? definition.defaultValue),
+        id: defaultRate.id,
+        value: String(stored?.value ?? defaultRate.value),
       };
     }),
-    cacheRates: marketCacheRateCatalog.map((definition) => {
-      const stored = storedCacheRates.find((rate) => rate.id === definition.id);
+    cacheRates: defaultMarketDrafts.cacheRates.map((defaultRate) => {
+      const stored = storedCacheRates.find((rate) => rate.id === defaultRate.id);
       return {
-        id: definition.id,
-        value: String(stored?.value ?? definition.defaultValue),
+        id: defaultRate.id,
+        value: String(stored?.value ?? defaultRate.value),
       };
     }),
     manualEffects: manualEffectInputCatalog.map((definition) => {

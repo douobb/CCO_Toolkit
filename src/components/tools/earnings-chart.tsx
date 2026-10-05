@@ -44,13 +44,14 @@ import {
   getEarningsChartCalloutPosition,
   getFixedEarningsChartRows,
   findNearestEarningsChartSeries,
-  getEarningsChartGroup,
+  mixedCrushingChartActivityId,
   getEarningsChartYScale,
   getEarningsChartYScaleTicks,
   isEarningsChartGroupId,
   selectableVariableEarningsChartActivityIds,
   transformEarningsChartYValue,
   variableEarningsChartActivityIds,
+  type EarningsChartActivityId,
   type EarningsChartData,
   type EarningsChartGroupId,
   type EarningsChartHoverTarget,
@@ -60,6 +61,7 @@ import type {
   EarningsComparisonMode,
   EarningsInputs,
 } from '@/lib/earnings-calculator';
+import type { MixedCrushingResult } from '@/lib/mixed-crushing-calculator';
 import type { Locale } from '@/lib/i18n';
 import type { ResolvedMarketPrices } from '@/lib/market-prices';
 import { createNumberFormatter, type NumberFormatter } from '@/lib/number-formatting';
@@ -67,6 +69,7 @@ import { getMessages } from '@/lib/translations';
 
 import type { EarningsOverviewToolLabels } from './earnings-overview';
 import { ChartViewportControls, useChartViewport } from './chart-viewport';
+import { mixedCrushingUiLabels } from './mixed-crushing-labels';
 
 interface EarningsChartSeriesStyle {
   readonly color: string;
@@ -193,7 +196,8 @@ function getViewBoxYFromClientY(
   return ((clientY - bounds.top) / Math.max(1, bounds.height)) * chartHeight;
 }
 
-function getActivityLabel(id: EarningsActivityId, locale: Locale) {
+function getActivityLabel(id: EarningsChartActivityId, locale: Locale) {
+  if (id === mixedCrushingChartActivityId) return mixedCrushingUiLabels[locale].activity;
   return earningsActivityCatalog.find((activity) => activity.id === id)?.labels[locale] ?? id;
 }
 
@@ -861,6 +865,7 @@ export function EarningsTrendChart({
   inputs,
   prices,
   comparisonMode,
+  mixedCrushingResult = null,
   numberFormatter,
 }: {
   readonly labels: EarningsOverviewToolLabels;
@@ -868,6 +873,7 @@ export function EarningsTrendChart({
   readonly inputs: EarningsInputs;
   readonly prices: ResolvedMarketPrices;
   readonly comparisonMode: EarningsComparisonMode;
+  readonly mixedCrushingResult?: MixedCrushingResult | null;
   readonly numberFormatter?: NumberFormatter;
 }) {
   const [activeGroupId, setActiveGroupId] = useState<EarningsChartGroupId>(
@@ -886,15 +892,14 @@ export function EarningsTrendChart({
     [locale, numberFormatter],
   );
   const chartData = useMemo(
-    () => deriveEarningsChartData(inputs, prices, comparisonMode),
-    [comparisonMode, inputs, prices],
+    () => deriveEarningsChartData(inputs, prices, comparisonMode, mixedCrushingResult),
+    [comparisonMode, inputs, mixedCrushingResult, prices],
   );
-  const activeGroup = getEarningsChartGroup(activeGroupId);
-  const visibleActivityIds = activeGroupId === 'variable'
+  const visibleActivityIds: readonly EarningsActivityId[] = activeGroupId === 'variable'
     ? variableEarningsChartActivityIds.filter((activityId) =>
         visibleVariableActivityIds.includes(activityId),
       )
-    : activeGroup.activityIds;
+    : [];
   const defaultPointIndex = Math.max(
     0,
     Math.min(chartData.points.length - 1, inputs.searchLevel - chartData.minLevel),

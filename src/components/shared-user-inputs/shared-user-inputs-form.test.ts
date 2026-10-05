@@ -11,6 +11,7 @@ import {
 import { manualEffectInputCatalog } from '@/data/game/effects';
 import { progressionLevelCatalog } from '@/data/game/progression';
 import {
+  createDefaultSharedMarketDrafts,
   createDefaultSharedPriceDrafts,
   createSharedUserInputsDraft,
   getSharedLevelInputMaximum,
@@ -18,6 +19,17 @@ import {
 } from './shared-user-inputs-form';
 
 describe('固定欄位 Shared User Inputs draft', () => {
+  it('以目前 catalog 建立完整市場預設 drafts', () => {
+    const drafts = createDefaultSharedMarketDrafts();
+
+    expect(drafts.prices).toHaveLength(marketPriceCatalog.length);
+    expect(drafts.exchangeRates).toEqual([{ id: 'btc-per-ai', value: '8450' }]);
+    expect(drafts.cacheRates).toEqual(marketCacheRateCatalog.map((definition) => ({
+      id: definition.id,
+      value: String(definition.defaultValue),
+    })));
+  });
+
   it('依 catalog 建立六個等級、已知物價、換算基準與手動效果欄位', () => {
     const draft = createSharedUserInputsDraft(defaultSharedUserInputs);
 

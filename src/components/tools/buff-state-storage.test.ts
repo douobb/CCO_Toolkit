@@ -68,6 +68,10 @@ describe('工具 Buff 狀態 storage', () => {
       bargainPercent: '0',
       btcBuffPercent: '100',
       comparisonMode: 'per-minute',
+      mixedCrushingMode: 'recommended',
+      mixedMedicalCount: '0',
+      mixedAmmunitionCount: '0',
+      mixedMilitaryCount: '0',
     }, normalizeEarningsOverviewToolState, 'btcBuffPercent');
     expectStored('level-conversion', {
       levelType: 'level',

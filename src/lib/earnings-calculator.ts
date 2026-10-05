@@ -417,9 +417,16 @@ function calculateConversionActivity(
 ): EarningsActivityResult {
   const inputPrice = itemPriceAi(activity.inputItemId, prices);
   const outputPrice = itemPriceAi(activity.outputItemId, prices);
-  const unitNet = inputPrice === null || outputPrice === null
+  const unitBtcCostAi = activity.unitBtcCost === 0
+    ? 0
+    : Number.isFinite(prices.btcPerAi) && prices.btcPerAi > 0
+      ? finiteResult(activity.unitBtcCost / prices.btcPerAi)
+      : null;
+  const unitNet = inputPrice === null || outputPrice === null || unitBtcCostAi === null
     ? null
-    : outputPrice * activity.outputQuantity - inputPrice * activity.inputQuantity;
+    : outputPrice * activity.outputQuantity
+      - inputPrice * activity.inputQuantity
+      - unitBtcCostAi;
   const safeUnitNet = finiteResult(unitNet);
   return activityResult(
     activity,

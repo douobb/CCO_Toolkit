@@ -14,10 +14,10 @@ describe('resolved market price model', () => {
   it('由 Game Data defaults 建立完整的純計算模型', () => {
     const prices = resolveMarketPrices();
 
-    expect(defaultBtcPerAi).toBe(8_150);
+    expect(defaultBtcPerAi).toBe(8_450);
     expect(prices).not.toHaveProperty('schemaVersion');
     expect(prices).not.toHaveProperty('btcPerAiUpdatedAt');
-    expect(prices.btcPerAi).toBe(8_150);
+    expect(prices.btcPerAi).toBe(8_450);
     expect(prices.assets['tech-scrap']).toEqual({
       basisCurrency: 'ai',
       basisValue: 110,
@@ -32,11 +32,11 @@ describe('resolved market price model', () => {
     });
     expect(prices.assets['old-pouch']).toEqual({
       basisCurrency: 'ai',
-      basisValue: 12.5,
+      basisValue: 13,
     });
     expect(prices.assets['fanny-pack']).toEqual({
       basisCurrency: 'ai',
-      basisValue: 130,
+      basisValue: 136,
     });
     expect(prices.assets['explorer-backpack']).toEqual({
       basisCurrency: 'ai',
@@ -73,8 +73,38 @@ describe('resolved market price model', () => {
       basisCurrency: 'ai',
       basisValue: 50,
     });
-    expect(getDualPrice(prices, 'tech-scrap', 'ai')).toBe(1 / 8_150);
+    expect(prices.assets['old-pouch']).toEqual({
+      basisCurrency: 'ai',
+      basisValue: 13,
+    });
+    expect(prices.assets['fanny-pack']).toEqual({
+      basisCurrency: 'ai',
+      basisValue: 136,
+    });
+    expect(getDualPrice(prices, 'tech-scrap', 'ai')).toBe(1 / 8_450);
     expect(getDualPrice(prices, 'tech-scrap', 'btc')).toBe(1);
+  });
+
+  it('更新背包預設價格後仍保留使用者覆寫的值與幣別', () => {
+    const prices = resolveMarketPrices({
+      ...defaultSharedUserInputs,
+      economy: {
+        ...defaultSharedUserInputs.economy,
+        prices: [
+          { itemId: 'old-pouch', currencyId: 'ai', amount: 14 },
+          { itemId: 'fanny-pack', currencyId: 'btc', amount: 2 },
+        ],
+      },
+    });
+
+    expect(prices.assets['old-pouch']).toEqual({
+      basisCurrency: 'ai',
+      basisValue: 14,
+    });
+    expect(prices.assets['fanny-pack']).toEqual({
+      basisCurrency: 'btc',
+      basisValue: 2,
+    });
   });
 
   it('套用 sparse 匯率與 cache override，並保留未覆寫 defaults', () => {
@@ -111,7 +141,7 @@ describe('resolved market price model', () => {
   it('純換算輔助依保存基準貨幣轉換，並保留小額輸入精度', () => {
     expect(convertMarketPriceAmount(2, 'ai', 'btc', 100)).toBe(200);
     expect(convertMarketPriceAmount(200, 'btc', 'ai', 100)).toBe(2);
-    expect(formatMarketPriceAmount(0.33 / 8_150)).toBe('0.0000404907975460123');
+    expect(formatMarketPriceAmount(0.33 / 8_450)).toBe('0.0000390532544378698');
     expect(formatMarketPriceAmount(24_450_000)).toBe('24450000');
   });
 });

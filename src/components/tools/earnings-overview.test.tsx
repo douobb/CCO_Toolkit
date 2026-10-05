@@ -1,12 +1,31 @@
+// @vitest-environment happy-dom
+
+import { act } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { ReactNode } from 'react';
-import { describe, expect, it } from 'vitest';
+import { createRoot, type Root } from 'react-dom/client';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import { SharedUserInputsProvider } from '@/components/shared-user-inputs';
 import { createNumberFormatter } from '@/lib/number-formatting';
-import { createSharedUserInputsStore, defaultSharedUserInputs } from '@/lib/storage';
+import type { EarningsComparisonMode } from '@/lib/earnings-calculator';
+import {
+  calculateManualMixedCrushing,
+  calculateRecommendedMixedCrushing,
+  getMixedCrushingComparisonValue,
+} from '@/lib/mixed-crushing-calculator';
+import {
+  createSharedUserInputsStore,
+  defaultSharedUserInputs,
+  loadToolState,
+  saveToolState,
+} from '@/lib/storage';
 import { getMessages } from '@/lib/translations';
 
+import {
+  formatMixedCrushingMessage,
+  mixedCrushingUiLabels,
+} from './mixed-crushing-labels';
 import {
   calculateEarningsOverviewTool,
   applyEarningsOverviewSharedValues,
@@ -17,6 +36,17 @@ import {
   parseEarningsOverviewValues,
   selectEarningsOverviewSharedValues,
 } from './earnings-overview';
+
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean })
+  .IS_REACT_ACT_ENVIRONMENT = true;
+
+interface MountedOverview {
+  readonly container: HTMLDivElement;
+  readonly root: Root;
+  readonly store: ReturnType<typeof createSharedUserInputsStore>;
+}
+
+const mountedOverviews: MountedOverview[] = [];
 
 function renderEarningsOverview(children: ReactNode) {
   const store = createSharedUserInputsStore({ storage: null });
@@ -29,8 +59,155 @@ function renderEarningsOverview(children: ReactNode) {
   return markup;
 }
 
+function setNumberInputValue(input: HTMLInputElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+  if (!setter) throw new Error('找不到 number input value setter');
+  setter.call(input, value);
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function setSelectValue(select: HTMLSelectElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set;
+  if (!setter) throw new Error('找不到 select value setter');
+  setter.call(select, value);
+  select.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+async function mountInteractiveOverview() {
+  const container = document.createElement('div');
+  document.body.append(container);
+  const store = createSharedUserInputsStore({ storage: null });
+  const root = createRoot(container);
+  mountedOverviews.push({ container, root, store });
+
+  await act(async () => {
+    root.render(
+      <SharedUserInputsProvider store={store}>
+        <EarningsOverviewToolProvider>
+          <EarningsOverviewCalculator
+            labels={getMessages('zh-tw').tools.earningsOverview}
+            locale="zh-tw"
+          />
+        </EarningsOverviewToolProvider>
+      </SharedUserInputsProvider>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  return container;
+}
+
+async function setMixedCount(
+  container: HTMLElement,
+  type: 'medical' | 'ammunition' | 'military',
+  value: string,
+) {
+  const input = container.querySelector<HTMLInputElement>(
+    `[data-mixed-crushing-number="${type}"]`,
+  );
+  if (!input) throw new Error(`找不到 ${type} 混合壓碎輸入欄`);
+  await act(async () => {
+    setNumberInputValue(input, value);
+    await Promise.resolve();
+  });
+}
+
+async function setComparisonMode(container: HTMLElement, mode: EarningsComparisonMode) {
+  const select = container.querySelector<HTMLSelectElement>(
+    '#earnings-overview-comparison-mode',
+  );
+  if (!select) throw new Error('找不到收益總覽比較方式選單');
+  await act(async () => {
+    setSelectValue(select, mode);
+    await Promise.resolve();
+  });
+}
+
+async function activateFixedChart(container: HTMLElement) {
+  const labels = getMessages('zh-tw').tools.earningsOverview;
+  const fixedTab = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
+    .find((candidate) => candidate.textContent === labels.trendGroupFixed);
+  if (!fixedTab) throw new Error('找不到固定收益圖表分頁');
+  await act(async () => fixedTab.click());
+}
+
+function expectRecommendedView(container: HTMLElement, mode: EarningsComparisonMode) {
+  const labels = getMessages('zh-tw').tools.earningsOverview;
+  const calculation = calculateEarningsOverviewTool({
+    searchLevel: '1',
+    printingLevel: '1',
+    miningLevel: '1',
+    bargainPercent: '0',
+    btcBuffPercent: '100',
+    comparisonMode: mode,
+  });
+  if (!calculation.result) throw new Error(`無法計算 ${mode} 測試結果`);
+  const expected = calculateRecommendedMixedCrushing(calculation.result);
+  if (!expected) throw new Error(`無法計算 ${mode} 混合壓碎推薦`);
+
+  const formatter = createNumberFormatter('zh-tw');
+  const controls = container.querySelector<HTMLElement>('[data-mixed-crushing-controls]');
+  expect(controls?.getAttribute('data-mixed-crushing-mode')).toBe('recommended');
+  expect(container.querySelector('[data-mixed-crushing-validation]')).toBeNull();
+
+  for (const type of ['medical', 'ammunition', 'military'] as const) {
+    const numberInput = container.querySelector<HTMLInputElement>(
+      `[data-mixed-crushing-number="${type}"]`,
+    );
+    const slider = container.querySelector<HTMLInputElement>(
+      `[data-mixed-crushing-slider="${type}"]`,
+    );
+    expect(numberInput?.value).toBe(String(expected.counts[type]));
+    expect(slider?.value).toBe(String(expected.counts[type]));
+  }
+
+  const row = container.querySelector<HTMLElement>('[data-earnings-overview-mixed-crushing]');
+  const expectedComposition = formatMixedCrushingMessage(
+    mixedCrushingUiLabels['zh-tw'].composition,
+    {
+      medical: formatter(expected.counts.medical, { maximumFractionDigits: 0 }),
+      ammunition: formatter(expected.counts.ammunition, { maximumFractionDigits: 0 }),
+      military: formatter(expected.counts.military, { maximumFractionDigits: 0 }),
+    },
+  );
+  expect(row?.textContent).toContain(mixedCrushingUiLabels['zh-tw'].recommended);
+  expect(row?.textContent).toContain(expectedComposition);
+  if (expected.totalNetAi !== null) {
+    expect(row?.textContent).toContain(formatter(expected.totalNetAi, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }));
+  }
+  if (mode === 'per-minute' && expected.aiPerMinute !== null) {
+    expect(row?.textContent).toContain(formatter(expected.aiPerMinute, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }));
+  }
+
+  const comparisonValue = getMixedCrushingComparisonValue(expected, mode);
+  const expectedChartValue = comparisonValue === null
+    ? labels.notAvailable
+    : `${formatter(comparisonValue, { maximumFractionDigits: 2 })} ${labels.aiUnit}`;
+  expect(container.querySelector<HTMLElement>(
+    '[data-earnings-chart-fixed-value="crush-mixed"]',
+  )?.textContent).toBe(expectedChartValue);
+}
+
+afterEach(async () => {
+  for (const mounted of mountedOverviews.splice(0)) {
+    await act(async () => mounted.root.unmount());
+    mounted.store.dispose();
+    mounted.container.remove();
+  }
+  window.localStorage.clear();
+  document.body.replaceChildren();
+});
+
 describe('Earnings overview calculator', () => {
-  it('呈現共用輸入、活動收益比較表與 16 筆活動', () => {
+  it('呈現共用輸入、混合壓碎控制與 17 筆活動', () => {
     const labels = getMessages('zh-tw').tools.earningsOverview;
     const markup = renderEarningsOverview(
       <EarningsOverviewCalculator labels={labels} locale="zh-tw" />,
@@ -50,7 +227,14 @@ describe('Earnings overview calculator', () => {
     expect(markup).toContain('data-comparison-mode="per-minute"');
     expect(markup).toContain('data-earnings-chart="true"');
     expect(markup).toContain('min-w-[40rem]');
-    expect(markup.match(/<tr/g)).toHaveLength(17);
+    expect(markup.match(/<tr/g)).toHaveLength(18);
+    expect(markup).toContain('data-mixed-crushing-controls="true"');
+    expect(markup).toContain('data-earnings-overview-mixed-crushing="true"');
+    expect(markup).toContain('data-mixed-crushing-number="medical"');
+    expect(markup).toContain('data-mixed-crushing-number="ammunition"');
+    expect(markup).toContain('data-mixed-crushing-number="military"');
+    expect(markup.match(/data-mixed-crushing-slider=/g)).toHaveLength(3);
+    expect(markup).toContain('推薦組合');
     expect(markup).toContain('活動收益');
     expect(markup).toContain('從共用設定填入');
     expect(markup).not.toContain('重設本工具');
@@ -96,11 +280,10 @@ describe('Earnings overview calculator', () => {
     expect(normalizeEarningsOverviewToolState({ ...missingBuff, btcBuffPercent: '100' }))
       .toMatchObject({ btcBuffPercent: '100' });
 
-    const current = {
+    const current = normalizeEarningsOverviewToolState({
       ...missingBuff,
       btcBuffPercent: '40',
-      comparisonMode: 'per-minute' as const,
-    };
+    })!;
     expect(applyEarningsOverviewSharedValues(
       current,
       selectEarningsOverviewSharedValues(defaultSharedUserInputs),
@@ -134,6 +317,10 @@ describe('Earnings overview calculator', () => {
     expect(normalizeEarningsOverviewToolState(legacyValues)).toEqual({
       ...legacyValues,
       comparisonMode: 'per-minute',
+      mixedCrushingMode: 'recommended',
+      mixedMedicalCount: '0',
+      mixedAmmunitionCount: '0',
+      mixedMilitaryCount: '0',
     });
     expect(legacyValues).toEqual(originalValues);
   });
@@ -166,6 +353,223 @@ describe('Earnings overview calculator', () => {
     expect(markup).not.toContain('每批淨收益');
   });
 
+  it('手動混合結果同時呈現在總覽列，沿用小數碎片產出', () => {
+    const values = {
+      searchLevel: '500',
+      printingLevel: '450',
+      miningLevel: '420',
+      bargainPercent: '40',
+      btcBuffPercent: '80',
+      comparisonMode: 'elapsed-15' as const,
+    };
+    const calculation = calculateEarningsOverviewTool(values);
+    const mixedResult = calculateManualMixedCrushing(
+      calculation.result!,
+      { medical: 2, ammunition: 3, military: 4 },
+    )!;
+    const markup = renderToStaticMarkup(
+      <EarningsOverviewResultTable
+        labels={getMessages('zh-tw').tools.earningsOverview}
+        locale="zh-tw"
+        result={calculation.result!}
+        mixedCrushingResult={mixedResult}
+        formatNumber={createNumberFormatter('zh-tw')}
+      />,
+    );
+
+    expect(markup).toContain('data-comparison-mode="elapsed-15"');
+    expect(markup).toContain('醫療 2 次 · 彈藥 3 次 · 軍用 4 次');
+    expect(markup).toContain('科技碎片產出: 10.8');
+    expect(markup).toContain('data-earnings-overview-mixed-crushing="true"');
+  });
+
+  it('無效手動數量提示錯誤、不保存，且總覽與固定圖表不比較該草稿', async () => {
+    const storedState = {
+      searchLevel: '1',
+      printingLevel: '1',
+      miningLevel: '1',
+      bargainPercent: '0',
+      btcBuffPercent: '100',
+      comparisonMode: 'per-minute' as const,
+      mixedCrushingMode: 'manual' as const,
+      mixedMedicalCount: '0',
+      mixedAmmunitionCount: '0',
+      mixedMilitaryCount: '0',
+    };
+    saveToolState('earnings-overview', storedState, { storage: window.localStorage });
+
+    const container = document.createElement('div');
+    document.body.append(container);
+    const store = createSharedUserInputsStore({ storage: null });
+    const root = createRoot(container);
+    mountedOverviews.push({ container, root, store });
+    await act(async () => {
+      root.render(
+        <SharedUserInputsProvider store={store}>
+          <EarningsOverviewToolProvider>
+            <EarningsOverviewCalculator
+              labels={getMessages('zh-tw').tools.earningsOverview}
+              locale="zh-tw"
+            />
+          </EarningsOverviewToolProvider>
+        </SharedUserInputsProvider>,
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const medicalInput = container.querySelector<HTMLInputElement>(
+      '[data-mixed-crushing-number="medical"]',
+    )!;
+    const ammunitionInput = container.querySelector<HTMLInputElement>(
+      '[data-mixed-crushing-number="ammunition"]',
+    )!;
+    const militaryInput = container.querySelector<HTMLInputElement>(
+      '[data-mixed-crushing-number="military"]',
+    )!;
+
+    await act(async () => {
+      setNumberInputValue(medicalInput, '1000');
+      await Promise.resolve();
+    });
+    await act(async () => {
+      setNumberInputValue(ammunitionInput, '1000');
+      await Promise.resolve();
+    });
+    expect(militaryInput.max).toBe('775');
+    await act(async () => {
+      setNumberInputValue(militaryInput, '1000');
+      await Promise.resolve();
+    });
+
+    const validation = container.querySelector<HTMLElement>(
+      '[data-mixed-crushing-validation="time"]',
+    );
+    expect(validation?.getAttribute('role')).toBe('alert');
+    expect(container.querySelector('[data-earnings-overview-mixed-crushing]')?.textContent)
+      .toContain(getMessages('zh-tw').tools.earningsOverview.notAvailable);
+    expect(loadToolState('earnings-overview', { storage: window.localStorage }))
+      .toEqual({
+        ...storedState,
+        mixedMedicalCount: '1000',
+        mixedAmmunitionCount: '1000',
+      });
+
+    const fixedTab = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
+      .find((candidate) => candidate.textContent === getMessages('zh-tw')
+        .tools.earningsOverview.trendGroupFixed)!;
+    await act(async () => fixedTab.click());
+    expect(container.querySelector<HTMLElement>(
+      '[data-earnings-chart-fixed-value="crush-mixed"]',
+    )?.textContent).toBe(getMessages('zh-tw').tools.earningsOverview.notAvailable);
+
+    await act(async () => {
+      setNumberInputValue(militaryInput, '2.5');
+      await Promise.resolve();
+    });
+    expect(container.querySelector('[data-mixed-crushing-validation="count"]'))
+      .not.toBeNull();
+    expect(loadToolState('earnings-overview', { storage: window.localStorage }))
+      .toEqual({
+        ...storedState,
+        mixedMedicalCount: '1000',
+        mixedAmmunitionCount: '1000',
+      });
+  });
+
+  it('有效手動組合切換到 30／15 分鐘時重設推薦並同步總覽、控制與固定圖表', async () => {
+    const container = await mountInteractiveOverview();
+    await activateFixedChart(container);
+
+    await setMixedCount(container, 'medical', '12');
+    await setMixedCount(container, 'ammunition', '3');
+    await setMixedCount(container, 'military', '4');
+    expect(container.querySelector('[data-mixed-crushing-controls]')
+      ?.getAttribute('data-mixed-crushing-mode')).toBe('manual');
+    expect(loadToolState('earnings-overview', { storage: window.localStorage }))
+      .toMatchObject({
+        mixedCrushingMode: 'manual',
+        mixedMedicalCount: '12',
+        mixedAmmunitionCount: '3',
+        mixedMilitaryCount: '4',
+      });
+
+    await setComparisonMode(container, 'elapsed-30');
+    expectRecommendedView(container, 'elapsed-30');
+    expect(loadToolState('earnings-overview', { storage: window.localStorage }))
+      .toMatchObject({
+        comparisonMode: 'elapsed-30',
+        mixedCrushingMode: 'recommended',
+        mixedMedicalCount: '0',
+        mixedAmmunitionCount: '0',
+        mixedMilitaryCount: '0',
+      });
+
+    await setComparisonMode(container, 'elapsed-15');
+    expectRecommendedView(container, 'elapsed-15');
+    expect(loadToolState('earnings-overview', { storage: window.localStorage }))
+      .toMatchObject({
+        comparisonMode: 'elapsed-15',
+        mixedCrushingMode: 'recommended',
+        mixedMedicalCount: '0',
+        mixedAmmunitionCount: '0',
+        mixedMilitaryCount: '0',
+      });
+  });
+
+  it('切換到 105 分鐘或每分鐘會清除無效草稿與錯誤並顯示該模式推薦', async () => {
+    const container = await mountInteractiveOverview();
+    await activateFixedChart(container);
+
+    await setMixedCount(container, 'medical', '2.5');
+    expect(container.querySelector('[data-mixed-crushing-validation="count"]'))
+      .not.toBeNull();
+    await setComparisonMode(container, 'elapsed-105');
+    expectRecommendedView(container, 'elapsed-105');
+
+    await setMixedCount(container, 'medical', '2.5');
+    expect(container.querySelector('[data-mixed-crushing-validation="count"]'))
+      .not.toBeNull();
+    await setComparisonMode(container, 'per-minute');
+    expectRecommendedView(container, 'per-minute');
+    expect(loadToolState('earnings-overview', { storage: window.localStorage }))
+      .toMatchObject({
+        comparisonMode: 'per-minute',
+        mixedCrushingMode: 'recommended',
+        mixedMedicalCount: '0',
+        mixedAmmunitionCount: '0',
+        mixedMilitaryCount: '0',
+      });
+  });
+
+  it('重選相同比較方式不清除手動草稿或覆寫已保存的組合', async () => {
+    const container = await mountInteractiveOverview();
+    await setMixedCount(container, 'medical', '27');
+
+    await act(async () => {
+      setSelectValue(
+        container.querySelector<HTMLSelectElement>('#earnings-overview-comparison-mode')!,
+        'per-minute',
+      );
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('[data-mixed-crushing-controls]')
+      ?.getAttribute('data-mixed-crushing-mode')).toBe('manual');
+    expect(container.querySelector<HTMLInputElement>(
+      '[data-mixed-crushing-number="medical"]',
+    )?.value).toBe('27');
+    expect(container.querySelector<HTMLElement>(
+      '[data-earnings-overview-mixed-crushing]',
+    )?.textContent).toContain(mixedCrushingUiLabels['zh-tw'].manual);
+    expect(loadToolState('earnings-overview', { storage: window.localStorage }))
+      .toMatchObject({
+        comparisonMode: 'per-minute',
+        mixedCrushingMode: 'manual',
+        mixedMedicalCount: '27',
+      });
+  });
+
   it('三語系都提供比較方式與飛逝選項文案', () => {
     for (const locale of ['zh-tw', 'zh-cn', 'en'] as const) {
       const labels = getMessages(locale).tools.earningsOverview;
@@ -178,6 +582,8 @@ describe('Earnings overview calculator', () => {
       expect(markup).toContain(labels.trendTitle);
       expect(markup).toContain(labels.trendGroup);
       expect(markup).toContain(labels.trendInteractionHint);
+      expect(markup).toContain(mixedCrushingUiLabels[locale].recommended);
+      expect(markup).toContain(mixedCrushingUiLabels[locale].manualControls);
       expect(markup).not.toContain('checkbox');
       expect(markup).not.toContain('勾選');
       expect(markup).not.toContain('勾选');

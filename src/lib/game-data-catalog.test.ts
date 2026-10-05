@@ -81,7 +81,7 @@ describe('TASK-403 Game Data catalog', () => {
       baseCurrencyId: 'ai',
       quoteCurrencyId: 'btc',
       unit: 'BTC/AI',
-      defaultValue: 8150,
+      defaultValue: 8450,
     });
   });
 
@@ -156,7 +156,19 @@ describe('TASK-403 Game Data catalog', () => {
       outputItemId: 'tech-scrap',
       inputQuantity: 1,
       outputQuantity: 1.2,
+      unitBtcCost: 0,
     });
+    expect(earningsActivityCatalog
+      .filter((activity) => activity.kind === 'pack')
+      .map((activity) => [
+        activity.id,
+        activity.kind === 'pack' ? activity.unitBtcCost : null,
+      ])).toEqual([
+      ['pack-old-pouch', 500],
+      ['pack-fanny-pack', 5_000],
+      ['pack-explorer-backpack', 5_000],
+      ['pack-employee-office-case', 50_000],
+    ]);
     expect(earningsActivityCatalog.every((activity) =>
       !Object.prototype.hasOwnProperty.call(activity, 'referenceTimeReductionPercent'),
     )).toBe(true);
@@ -192,7 +204,7 @@ describe('TASK-403 Game Data catalog', () => {
       .toBe('医疗科技零件');
   });
 
-  it('所有目前資料集保留 CCO Found 來源與初始 snapshot metadata', () => {
+  it('所有目前資料集保留 CCO Found 來源與登錄的 metadata', () => {
     for (const dataSet of [
       progressionDataSet,
       backpackProgressionDataSet,
@@ -207,8 +219,17 @@ describe('TASK-403 Game Data catalog', () => {
         name: 'CCO Found',
         url: 'https://docs.google.com/spreadsheets/d/1wJLuZhZg_Xs1ouyjh6chntY8p3lcgNTuRU3-9JwKxQ4',
       });
-      expect(dataSet.dataVersion).toBe('cco-found-initial-snapshot');
-      expect(['2026-08-28', '2026-08-29', '2026-09-19']).toContain(dataSet.updatedAt);
+      if (dataSet.datasetId === 'economy') {
+        expect(dataSet.dataVersion).toBe('cco-found-price-update-2026-10-05');
+        expect(dataSet.updatedAt).toBe('2026-10-05');
+      } else if (dataSet.datasetId === 'earnings-activities') {
+        expect(dataSet.schemaVersion).toBe('1.1.0');
+        expect(dataSet.dataVersion).toBe('cco-found-pack-btc-cost-update-2026-10-05');
+        expect(dataSet.updatedAt).toBe('2026-10-05');
+      } else {
+        expect(dataSet.dataVersion).toBe('cco-found-initial-snapshot');
+        expect(['2026-08-28', '2026-08-29', '2026-09-19']).toContain(dataSet.updatedAt);
+      }
       expect(Object.isFrozen(dataSet)).toBe(true);
       expect(Object.isFrozen(dataSet.payload)).toBe(true);
     }

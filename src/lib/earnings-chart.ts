@@ -10,7 +10,14 @@ import {
   type EarningsComparisonMode,
   type EarningsInputs,
 } from './earnings-calculator';
+import {
+  getMixedCrushingComparisonValue,
+  type MixedCrushingResult,
+} from './mixed-crushing-calculator';
 import type { ResolvedMarketPrices } from './market-prices';
+
+export const mixedCrushingChartActivityId = 'crush-mixed' as const;
+export type EarningsChartActivityId = EarningsActivityId | typeof mixedCrushingChartActivityId;
 
 export const fixedEarningsChartActivityIds = [
   'white-box',
@@ -18,11 +25,12 @@ export const fixedEarningsChartActivityIds = [
   'crush-medical',
   'crush-ammunition',
   'crush-military-ammunition',
+  mixedCrushingChartActivityId,
   'pack-old-pouch',
   'pack-fanny-pack',
   'pack-explorer-backpack',
   'pack-employee-office-case',
-] as const satisfies readonly EarningsActivityId[];
+] as const satisfies readonly EarningsChartActivityId[];
 
 /** 變動收益圖表中的所有系列；yellow-box 是不可關閉的固定參考線。 */
 export const variableEarningsChartActivityIds = [
@@ -57,7 +65,7 @@ export const earningsChartGroups = [
   { id: 'fixed', activityIds: fixedEarningsChartActivityIds },
 ] as const satisfies readonly {
   readonly id: string;
-  readonly activityIds: readonly EarningsActivityId[];
+  readonly activityIds: readonly EarningsChartActivityId[];
 }[];
 
 export type EarningsChartGroupId = (typeof earningsChartGroups)[number]['id'];
@@ -74,7 +82,7 @@ export function getEarningsChartGroup(groupId: EarningsChartGroupId) {
 }
 
 export type EarningsChartActivityValues = Readonly<
-  Record<EarningsActivityId, number | null>
+  Record<EarningsChartActivityId, number | null>
 >;
 
 export interface EarningsChartPoint {
@@ -84,14 +92,14 @@ export interface EarningsChartPoint {
 
 export interface EarningsChartData {
   readonly comparisonMode: EarningsComparisonMode;
-  readonly activityIds: readonly EarningsActivityId[];
+  readonly activityIds: readonly EarningsChartActivityId[];
   readonly points: readonly EarningsChartPoint[];
   readonly minLevel: number;
   readonly maxLevel: number;
 }
 
 export interface FixedEarningsChartRow {
-  readonly activityId: EarningsActivityId;
+  readonly activityId: EarningsChartActivityId;
   readonly value: number | null;
 }
 
@@ -283,8 +291,17 @@ export function deriveEarningsChartData(
   inputs: EarningsInputs,
   prices: ResolvedMarketPrices,
   comparisonMode: EarningsComparisonMode,
+  mixedCrushingResult: MixedCrushingResult | null = null,
 ): EarningsChartData {
-  const activityIds = earningsActivityIds;
+  const activityIds: readonly EarningsChartActivityId[] = [
+    ...earningsActivityIds,
+    mixedCrushingChartActivityId,
+  ];
+  // 混合壓碎固定跨等級；solver 結果由呼叫端計算一次，800 個點只重用同一數值。
+  const mixedCrushingValue = getMixedCrushingComparisonValue(
+    mixedCrushingResult,
+    comparisonMode,
+  );
   const points = Array.from(
     { length: EARNINGS_LEVEL_MAX - EARNINGS_LEVEL_MIN + 1 },
     (_, index): EarningsChartPoint => {
@@ -304,10 +321,11 @@ export function deriveEarningsChartData(
       );
       const values = Object.fromEntries(
         activityIds.map((id) => {
+          if (id === mixedCrushingChartActivityId) return [id, mixedCrushingValue];
           const activity = activityById.get(id);
           return [id, activity ? getActivityValue(activity, comparisonMode) : null];
         }),
-      ) as Record<EarningsActivityId, number | null>;
+      ) as Record<EarningsChartActivityId, number | null>;
 
       return { level, values };
     },

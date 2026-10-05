@@ -21,7 +21,15 @@ import {
   selectableVariableEarningsChartActivityIds,
 } from '@/lib/earnings-chart';
 import { earningsActivityCatalog } from '@/data/game/earnings-activities';
-import type { EarningsComparisonMode, EarningsInputs } from '@/lib/earnings-calculator';
+import {
+  calculateEarnings,
+  type EarningsComparisonMode,
+  type EarningsInputs,
+} from '@/lib/earnings-calculator';
+import {
+  calculateManualMixedCrushing,
+  type MixedCrushingResult,
+} from '@/lib/mixed-crushing-calculator';
 import { resolveMarketPrices } from '@/lib/market-prices';
 import { createNumberFormatter } from '@/lib/number-formatting';
 import { defaultSharedUserInputs } from '@/lib/storage';
@@ -43,7 +51,10 @@ const inputs: EarningsInputs = {
 };
 const prices = resolveMarketPrices(defaultSharedUserInputs);
 
-function chart(mode: EarningsComparisonMode) {
+function chart(
+  mode: EarningsComparisonMode,
+  mixedCrushingResult: MixedCrushingResult | null = null,
+) {
   return (
     <EarningsTrendChart
       labels={labels}
@@ -51,16 +62,20 @@ function chart(mode: EarningsComparisonMode) {
       inputs={inputs}
       prices={prices}
       comparisonMode={mode}
+      mixedCrushingResult={mixedCrushingResult}
     />
   );
 }
 
-async function renderChart(mode: EarningsComparisonMode = 'per-minute') {
+async function renderChart(
+  mode: EarningsComparisonMode = 'per-minute',
+  mixedCrushingResult: MixedCrushingResult | null = null,
+) {
   const container = document.createElement('div');
   document.body.append(container);
   const root = createRoot(container);
   await act(async () => {
-    root.render(chart(mode));
+    root.render(chart(mode, mixedCrushingResult));
     await Promise.resolve();
   });
   return { container, root };
@@ -127,7 +142,7 @@ describe('Earnings trend chart', () => {
     expect(cardContent?.className).toContain('sm:px-6');
     expect(markup).toContain('data-earnings-chart-group="variable"');
     expect(markup).toContain('data-chart-point-count="800"');
-    expect(markup).toContain('data-chart-series-count="16"');
+    expect(markup).toContain('data-chart-series-count="17"');
     expect(markup).toContain(`data-visible-series-count="${defaultEarningsChartVisibleActivityIds.length}"`);
     expect(markup).toContain('data-chart-tick-count="5"');
     expect(markup).toContain('data-chart-y-tick-count="5"');
@@ -224,7 +239,7 @@ describe('Earnings trend chart', () => {
     }
   });
 
-  it('切換兩個檢視、切換與重設系列，固定收益改用九列長條', async () => {
+  it('切換兩個檢視、切換與重設系列，固定收益包含混合壓碎列', async () => {
     const { container, root } = await renderChart();
     const labelsByGroup = {
       variable: labels.trendGroupVariable,
@@ -310,12 +325,12 @@ describe('Earnings trend chart', () => {
     expect(fixedTab.getAttribute('aria-selected')).toBe('true');
     expect(container.querySelector('svg[tabindex="0"]')).toBeNull();
     expect(container.querySelector('[data-chart-viewport-controls]')).toBeNull();
-    expect(container.querySelectorAll('[data-earnings-chart-fixed-row]')).toHaveLength(9);
+    expect(container.querySelectorAll('[data-earnings-chart-fixed-row]')).toHaveLength(10);
     expect(Array.from(container.querySelectorAll<HTMLElement>('[data-earnings-chart-fixed-row]'))
       .map((row) => row.getAttribute('data-earnings-chart-fixed-activity')))
       .toEqual(getFixedEarningsChartRows(deriveEarningsChartData(inputs, prices, 'per-minute'))
         .map((row) => row.activityId));
-    expect(container.querySelectorAll('[data-earnings-chart-fixed-zero-axis]')).toHaveLength(9);
+    expect(container.querySelectorAll('[data-earnings-chart-fixed-zero-axis]')).toHaveLength(10);
     expect(container.querySelector('[data-earnings-chart-fixed="true"]')?.getAttribute('aria-label'))
       .toBe(labels.trendFixedHint);
     expect(container.querySelector('[data-earnings-chart-fixed-hint]')).toBeNull();
@@ -326,7 +341,7 @@ describe('Earnings trend chart', () => {
     const fixedGridTracks = Array.from(
       container.querySelectorAll<HTMLElement>('[data-earnings-chart-fixed-grid="true"]'),
     ).map((element) => element.className.match(/grid-cols-\[[^\]]+\]/)?.[0]);
-    expect(fixedGridTracks.length).toBe(10);
+    expect(fixedGridTracks.length).toBe(11);
     expect(new Set(fixedGridTracks).size).toBe(1);
 
     await act(async () => variableTab.click());
@@ -346,6 +361,51 @@ describe('Earnings trend chart', () => {
     expect(chartCanvas).not.toBeNull();
     expect(container.textContent).toContain(labels.trendAxisElapsed);
     expect(elapsedPath).not.toBe(perMinutePath);
+
+    await unmount(root);
+  });
+
+  it('固定圖表呈現總覽傳入的有效手動組合，並隨比較模式切換數值', async () => {
+    const counts = { medical: 2, ammunition: 3, military: 4 };
+    const calculation = calculateEarnings(inputs, prices, { comparisonMode: 'per-minute' })!;
+    const manualResult = calculateManualMixedCrushing(calculation, counts)!;
+    const { container, root } = await renderChart('per-minute', manualResult);
+    const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
+    const fixedTab = tabs
+      .find((candidate) => candidate.textContent === labels.trendGroupFixed)!;
+    const variableTab = tabs
+      .find((candidate) => candidate.textContent === labels.trendGroupVariable)!;
+
+    await act(async () => fixedTab.click());
+    const mixedValue = container.querySelector<HTMLElement>(
+      '[data-earnings-chart-fixed-value="crush-mixed"]',
+    );
+    expect(container.querySelector('[data-earnings-chart-fixed-activity="crush-mixed"]'))
+      .not.toBeNull();
+    expect(mixedValue?.textContent).toContain(
+      createNumberFormatter('zh-tw')(manualResult.aiPerMinute!, {
+        maximumFractionDigits: 2,
+      }),
+    );
+
+    const elapsedCalculation = calculateEarnings(inputs, prices, {
+      comparisonMode: 'elapsed-105',
+    })!;
+    const elapsedManualResult = calculateManualMixedCrushing(elapsedCalculation, counts)!;
+    await act(async () => {
+      root.render(chart('elapsed-105', elapsedManualResult));
+      await Promise.resolve();
+    });
+    await act(async () => variableTab.click());
+    expect(container.querySelector('[data-comparison-mode="elapsed-105"]')).not.toBeNull();
+    await act(async () => fixedTab.click());
+    expect(container.querySelector<HTMLElement>(
+      '[data-earnings-chart-fixed-value="crush-mixed"]',
+    )?.textContent).toContain(
+      createNumberFormatter('zh-tw')(elapsedManualResult.totalNetAi!, {
+        maximumFractionDigits: 2,
+      }),
+    );
 
     await unmount(root);
   });

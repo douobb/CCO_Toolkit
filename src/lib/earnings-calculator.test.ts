@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { resolveMarketPrices } from './market-prices';
+import type { MarketPriceItemId } from '@/data/game/economy';
+import { earningsActivityCatalog } from '@/data/game/earnings-activities';
+import {
+  getDualPrice,
+  resolveMarketPrices,
+  type ResolvedMarketPrices,
+} from './market-prices';
 import { AI_GROUPS_PER_ACTION, calculateMining, miningDefaults } from './mining-calculator';
 import {
   calculateEarnings,
@@ -16,6 +22,11 @@ const validInputs = {
   btcBuffPercent: 0,
   bargainPercent: 0,
 } as const;
+
+function getAiItemPricePerUnit(itemId: string, prices: ResolvedMarketPrices): number {
+  const price = getDualPrice(prices, itemId as MarketPriceItemId, 'ai');
+  return itemId === 'tech-scrap' ? price / 1_000 : price;
+}
 
 describe('earnings calculator', () => {
   it('產生完整活動目錄並按每分鐘 AI 收益排序', () => {
@@ -49,6 +60,124 @@ describe('earnings calculator', () => {
 
     expect(changedCrush?.batchNetAi).not.toBe(defaultCrush?.batchNetAi);
   });
+
+  it('四種包以單位 BTC 費用按目前匯率扣除，並正確產生整批與每分鐘收益', () => {
+    const prices = resolveMarketPrices();
+    expect(prices.btcPerAi).toBe(8_450);
+    const calculation = calculateEarnings(validInputs, prices)!;
+    const grossAiById = {
+      'pack-old-pouch': 2,
+      'pack-fanny-pack': 6,
+      'pack-explorer-backpack': 10,
+      'pack-employee-office-case': 0,
+    } as const;
+
+    for (const [id, grossAi] of Object.entries(grossAiById)) {
+      const definition = earningsActivityCatalog.find((activity) => activity.id === id);
+      const result = calculation.activities.find((activity) => activity.id === id);
+      expect(definition?.kind).toBe('pack');
+      expect(result).toBeDefined();
+      if (!definition || definition.kind !== 'pack' || !result) continue;
+
+      const grossAiFromPrices = getAiItemPricePerUnit(definition.outputItemId, prices)
+        * definition.outputQuantity
+        - getAiItemPricePerUnit(definition.inputItemId, prices) * definition.inputQuantity;
+      expect(grossAiFromPrices).toBeCloseTo(
+        grossAiById[id as keyof typeof grossAiById],
+        12,
+      );
+      const expectedUnitNetAi = grossAiFromPrices - definition.unitBtcCost / prices.btcPerAi;
+      expect(result.unitNetAi).toBeCloseTo(expectedUnitNetAi, 12);
+      expect(result.batchNetAi).toBeCloseTo(expectedUnitNetAi * definition.batchSize, 12);
+      expect(result.aiPerMinute).toBeCloseTo(
+        (expectedUnitNetAi * definition.batchSize) / result.effectiveBatchMinutes,
+        12,
+      );
+    }
+
+    const employeeOfficeCase = calculation.activities.find(
+      (activity) => activity.id === 'pack-employee-office-case',
+    )?.unitNetAi;
+    expect(employeeOfficeCase).toBeDefined();
+    expect(employeeOfficeCase ?? 0).toBeLessThan(0);
+  });
+
+  it('自訂 BTC/AI 匯率會改變 BTC 費用的 AI 扣除額', () => {
+    const defaultPrices = resolveMarketPrices();
+    const customPrices = resolveMarketPrices({
+      economy: {
+        prices: [],
+        exchangeRates: [{ id: 'btc-per-ai', value: 10_000 }],
+        cacheRates: [],
+      },
+    });
+    const defaultPack = calculateEarnings(validInputs, defaultPrices)?.activities
+      .find((activity) => activity.id === 'pack-old-pouch');
+    const customPack = calculateEarnings(validInputs, customPrices)?.activities
+      .find((activity) => activity.id === 'pack-old-pouch');
+
+    expect(defaultPack?.unitNetAi).not.toBeNull();
+    expect(customPack?.unitNetAi).not.toBeNull();
+    expect((customPack?.unitNetAi ?? 0) - (defaultPack?.unitNetAi ?? 0)).toBeCloseTo(
+      500 / defaultPrices.btcPerAi - 500 / customPrices.btcPerAi,
+      12,
+    );
+  });
+
+  it('飛逝比較按完成次數累計單位收益，且不重複計入批次數', () => {
+    const prices = resolveMarketPrices();
+    const perMinute = calculateEarnings(validInputs, prices)!;
+    const elapsed = calculateEarnings(validInputs, prices, { comparisonMode: 'elapsed-15' })!;
+    const expected = [
+      { id: 'pack-old-pouch', count: 15, unitSeconds: 300 },
+      { id: 'pack-fanny-pack', count: 5, unitSeconds: 900 },
+      { id: 'pack-explorer-backpack', count: 2, unitSeconds: 1_800 },
+      { id: 'pack-employee-office-case', count: 1, unitSeconds: 2_700 },
+    ] as const;
+
+    for (const entry of expected) {
+      const unit = perMinute.activities.find((activity) => activity.id === entry.id);
+      const result = elapsed.activities.find((activity) => activity.id === entry.id);
+      expect(unit?.unitNetAi).not.toBeNull();
+      expect(result?.elapsed).toMatchObject({
+        count: entry.count,
+        usedSeconds: entry.count * entry.unitSeconds * 0.2,
+      });
+      expect(result?.elapsed?.totalNetAi).toBeCloseTo(
+        (unit?.unitNetAi ?? 0) * entry.count,
+        12,
+      );
+    }
+  });
+
+  it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
+    '無效 BTC/AI 匯率 %s 不產生無限或錯誤的包收益，且 crush 維持零費用',
+    (btcPerAi) => {
+      const invalidPrices = { ...resolveMarketPrices(), btcPerAi };
+      const perMinute = calculateEarnings(validInputs, invalidPrices)!;
+      const elapsed = calculateEarnings(validInputs, invalidPrices, {
+        comparisonMode: 'elapsed-15',
+      })!;
+
+      for (const id of [
+        'pack-old-pouch',
+        'pack-fanny-pack',
+        'pack-explorer-backpack',
+        'pack-employee-office-case',
+      ] as const) {
+        expect(perMinute.activities.find((activity) => activity.id === id)).toMatchObject({
+          unitNetAi: null,
+          batchNetAi: null,
+          aiPerMinute: null,
+        });
+        expect(elapsed.activities.find((activity) => activity.id === id)?.elapsed?.totalNetAi)
+          .toBeNull();
+      }
+
+      expect(perMinute.activities.find((activity) => activity.id === 'crush-medical'))
+        .toMatchObject({ unitNetAi: 0.082, batchNetAi: 82 });
+    },
+  );
 
   it('以有效秒數計算飛逝次數，並在活動批次上限後停止增加', () => {
     const expectedCounts = [5, 10, 12, 12, 12];
@@ -154,8 +283,8 @@ describe('earnings calculator', () => {
 
     expect(search?.unitNetAi).toBeCloseTo(8.481941820494825, 12);
     expect(search?.batchNetAi).toBeCloseTo(101.7833018459379, 12);
-    expect(mining?.unitNetAi).toBeCloseTo(-2.594846625766871, 12);
-    expect(mining?.batchNetAi).toBeCloseTo(-20.75877300613497, 12);
+    expect(mining?.unitNetAi).toBeCloseTo(-3.0281656804733728, 12);
+    expect(mining?.batchNetAi).toBeCloseTo(-24.225325443786982, 12);
     expect(crushing).toMatchObject({
       batchSize: 1_000,
       effectiveBatchMinutes: 53.333333333333336,
