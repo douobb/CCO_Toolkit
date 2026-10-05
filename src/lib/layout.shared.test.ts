@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { resolveLinkItems } from 'fumadocs-ui/layouts/shared';
+import { BookOpen, Calculator, FileText, Info, Star } from 'lucide-react';
 import blogMeta from '../../content/blog/meta.json';
 import blogZhCnMeta from '../../content/blog/meta.zh-cn.json';
 import aboutMeta from '../../content/about/meta.json';
@@ -24,6 +25,25 @@ const privacyPageSource = readFileSync(
 );
 
 describe('Fumadocs navigation', () => {
+  it('pairs each navigation page with a decorative icon in every locale', () => {
+    const icons = [Calculator, BookOpen, FileText, Star, Info];
+    for (const locale of ['zh-tw', 'zh-cn', 'en'] as const) {
+      const links = getNavigationLinks(locale);
+      expect(links).toHaveLength(icons.length);
+      links.forEach((link, index) => {
+        expect(link).toMatchObject({
+          icon: {
+            type: icons[index],
+            props: {
+              className: 'size-4 shrink-0 translate-y-px',
+              'aria-hidden': 'true',
+            },
+          },
+        });
+      });
+    }
+  });
+
   it('provides an external GitHub repository icon as the last navigation link in every locale', () => {
     for (const locale of ['zh-tw', 'zh-cn', 'en'] as const) {
       for (const options of [baseOptions(locale), docsOptions(locale)]) {

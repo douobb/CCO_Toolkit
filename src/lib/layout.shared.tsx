@@ -1,5 +1,6 @@
 import type { BaseLayoutProps } from 'fumadocs-ui/layouts/shared';
 import { LanguageSelectText } from 'fumadocs-ui/layouts/shared/slots/language-select';
+import { BookOpen, Calculator, FileText, Info, Star } from 'lucide-react';
 import {
   ToolPlayerSettingsHeaderLink,
   ToolPlayerSettingsLanguageSelect,
@@ -15,26 +16,31 @@ export function getNavigationLinks(locale: Locale): NonNullable<BaseLayoutProps[
   return [
     {
       text: navigation.tools,
+      icon: <Calculator className="size-4 shrink-0 translate-y-px" aria-hidden="true" />,
       url: toLocalePath(locale, 'tools'),
       active: 'nested-url',
     },
     {
       text: navigation.guides,
+      icon: <BookOpen className="size-4 shrink-0 translate-y-px" aria-hidden="true" />,
       url: toLocalePath(locale, 'guides'),
       active: 'nested-url',
     },
     {
       text: navigation.blog,
+      icon: <FileText className="size-4 shrink-0 translate-y-px" aria-hidden="true" />,
       url: toLocalePath(locale, 'blog'),
       active: 'nested-url',
     },
     {
       text: navigation.recommendations,
+      icon: <Star className="size-4 shrink-0 translate-y-px" aria-hidden="true" />,
       url: toLocalePath(locale, 'recommendations'),
       active: 'nested-url',
     },
     {
       text: navigation.about,
+      icon: <Info className="size-4 shrink-0 translate-y-px" aria-hidden="true" />,
       url: toLocalePath(locale, 'about'),
       active: 'nested-url',
     },
