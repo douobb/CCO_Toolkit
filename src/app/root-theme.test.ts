@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import { parse, type Rule } from 'postcss';
 import { describe, expect, it } from 'vitest';
 
 const rootLayouts = [
@@ -36,7 +37,7 @@ describe('dark root layouts', () => {
     expect(stylesheet).not.toContain('prefers-reduced-motion');
   });
 
-  it('sets weight 700 only on the main title and semantic article headings', async () => {
+  it('keeps the always-on weight 700 rule on the main title and semantic article headings', async () => {
     const stylesheet = await readFile(new URL('./site-effects.css', import.meta.url), 'utf8');
 
     expect(stylesheet).toContain('h1.site-title-glow');
@@ -47,5 +48,36 @@ describe('dark root layouts', () => {
     expect(stylesheet).not.toContain('body {\n  font-weight');
     expect(stylesheet).not.toContain('nav {\n  font-weight');
     expect(stylesheet).not.toContain('label {\n  font-weight');
+  });
+
+  it('applies weight 700 to gold home and tool headings only on mobile', async () => {
+    const stylesheet = parse(await readFile(new URL('./site-effects.css', import.meta.url), 'utf8'));
+    const goldSelectors = ['.site-home-section-heading', '.site-tool-section-heading'];
+    const desktopGoldWeightRules: Rule[] = [];
+    const mobileWeightRules: Rule[] = [];
+
+    stylesheet.nodes?.forEach((node) => {
+      if (node.type !== 'rule' || !node.selectors.some((selector) => goldSelectors.includes(selector))) {
+        return;
+      }
+      node.walkDecls('font-weight', () => { desktopGoldWeightRules.push(node); });
+    });
+    stylesheet.walkAtRules('media', (mediaRule) => {
+      if (mediaRule.params !== '(max-width: 639.98px)') return;
+      mediaRule.walkRules((rule) => {
+        let hasFontWeight = false;
+        rule.walkDecls('font-weight', () => { hasFontWeight = true; });
+        if (hasFontWeight) mobileWeightRules.push(rule);
+      });
+    });
+
+    expect(desktopGoldWeightRules).toHaveLength(0);
+    expect(mobileWeightRules).toHaveLength(1);
+    expect(mobileWeightRules[0].selectors).toEqual(goldSelectors);
+    const declarations: string[] = [];
+    mobileWeightRules[0].walkDecls((declaration) => {
+      declarations.push(`${declaration.prop}:${declaration.value}`);
+    });
+    expect(declarations).toEqual(['font-weight:700']);
   });
 });

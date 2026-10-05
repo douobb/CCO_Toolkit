@@ -19,6 +19,13 @@ const gameDataVersionCellSelector =
 const gameDataVersionFirstCellSelector =
   `${gameDataVersionCellSelector}:first-child:not([colspan]:not([colspan='1']))`;
 const gameDataVersionSourceCellSelector = `${gameDataVersionCellSelector}:nth-child(6)`;
+const earningsOverviewTableSelector = "table[data-earnings-overview-table='true']";
+const earningsOverviewColumnSelector = (index: number) =>
+  `${earningsOverviewTableSelector} > colgroup > col:nth-child(${index})`;
+const earningsOverviewCellSelector =
+  `${earningsOverviewTableSelector}:not([data-sticky-first-column='false']) tr > :is(th, td)`;
+const earningsOverviewFirstCellSelector =
+  `${earningsOverviewCellSelector}:first-child:not([colspan]:not([colspan='1']))`;
 
 function normalizeSelector(selector: string) {
   return selector.replace(/\s+/g, ' ').replace(/\s*>\s*/g, ' > ').trim();
@@ -33,6 +40,22 @@ function getDeclarations(selector: string) {
         declarations.set(declaration.prop, declaration.value);
       });
     }
+  });
+
+  return declarations;
+}
+
+function getMediaDeclarations(media: string, selector: string) {
+  const declarations = new Map<string, string>();
+
+  stylesheet.walkAtRules('media', (rule) => {
+    if (rule.params !== media) return;
+    rule.walkRules((nestedRule) => {
+      if (normalizeSelector(nestedRule.selector) !== normalizeSelector(selector)) return;
+      nestedRule.walkDecls((declaration) => {
+        declarations.set(declaration.prop, declaration.value);
+      });
+    });
   });
 
   return declarations;
@@ -95,6 +118,73 @@ describe('global sticky table styles', () => {
     expect(mobileDeclarations.get('overflow-wrap')).toBe('normal');
     expect(mobileDeclarations.get('word-break')).toBe('normal');
     expect(getDeclarations(firstCellSelector).get('overflow-wrap')).toBe('anywhere');
+  });
+
+  it('assigns a complete 640px mobile column layout only to the earnings table', () => {
+    const mobileColumnWidths = Array.from({ length: 5 }, (_, index) =>
+      getMediaDeclarations('(max-width: 639.98px)', earningsOverviewColumnSelector(index + 1))
+        .get('width'),
+    );
+    const mobileFirstCell = getMediaDeclarations(
+      '(max-width: 639.98px)',
+      earningsOverviewFirstCellSelector,
+    );
+    const mobileCells = getMediaDeclarations(
+      '(max-width: 639.98px)',
+      earningsOverviewCellSelector,
+    );
+    const narrowColumnWidths = Array.from({ length: 5 }, (_, index) =>
+      getMediaDeclarations('(max-width: 359.98px)', earningsOverviewColumnSelector(index + 1))
+        .get('width')
+        ?? getMediaDeclarations('(max-width: 639.98px)', earningsOverviewColumnSelector(index + 1))
+          .get('width'),
+    );
+    const narrowFirstCell = getMediaDeclarations(
+      '(max-width: 359.98px)',
+      earningsOverviewFirstCellSelector,
+    );
+    const desktopFirstCell = getMediaDeclarations(
+      '(min-width: 640px)',
+      earningsOverviewFirstCellSelector,
+    );
+
+    expect(mobileColumnWidths).toEqual([
+      '140px',
+      '100px',
+      '105px',
+      '135px',
+      '160px',
+    ]);
+    expect([140, 100, 105, 135, 160].reduce((total, width) => total + width, 0)).toBe(640);
+    expect(mobileFirstCell.get('width')).toBe('140px');
+    expect(mobileFirstCell.get('min-width')).toBe('140px');
+    expect(mobileFirstCell.get('max-width')).toBe('140px');
+    expect(mobileFirstCell.get('overflow-wrap')).toBe('normal');
+    expect(mobileFirstCell.get('word-break')).toBe('normal');
+    expect(mobileCells.get('padding-inline')).toBe('12px');
+    expect(narrowColumnWidths).toEqual([
+      '128px',
+      '100px',
+      '105px',
+      '135px',
+      '172px',
+    ]);
+    expect([128, 100, 105, 135, 172].reduce((total, width) => total + width, 0)).toBe(640);
+    expect(narrowFirstCell.get('width')).toBe('128px');
+    expect(narrowFirstCell.get('min-width')).toBe('128px');
+    expect(narrowFirstCell.get('max-width')).toBe('128px');
+    expect(desktopFirstCell.get('min-width')).toBe('unset');
+    expect(desktopFirstCell.get('max-width')).toBe('unset');
+    expect(desktopFirstCell.get('overflow-wrap')).toBe('normal');
+    expect(desktopFirstCell.get('word-break')).toBe('normal');
+    for (let index = 1; index <= 5; index += 1) {
+      expect(getMediaDeclarations('(min-width: 640px)', earningsOverviewColumnSelector(index))
+        .has('width')).toBe(false);
+    }
+
+    expect(getDeclarations(firstCellSelector).has('width')).toBe(false);
+    expect(getDeclarations(firstCellSelector).has('padding-inline')).toBe(false);
+    expect(earningsOverviewFirstCellSelector).toContain('[data-earnings-overview-table=');
   });
 
   it('loads from the application-wide stylesheet', () => {

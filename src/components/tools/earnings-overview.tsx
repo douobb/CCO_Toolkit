@@ -10,7 +10,7 @@ import {
 } from 'react';
 import { Download } from 'lucide-react';
 
-import type { ContextualDocsPageProps } from '@/components/context';
+import { ContextSheet, type ContextualDocsPageProps } from '@/components/context';
 import {
   useSharedUserInputs,
   useSharedUserInputsStore,
@@ -865,18 +865,45 @@ function MixedCrushingManualControls({
 export function EarningsOverviewResultTable({
   labels,
   locale,
+  closeLabel,
   result,
   mixedCrushingResult = null,
   formatNumber,
 }: {
   readonly labels: EarningsOverviewToolLabels;
   readonly locale: Locale;
+  readonly closeLabel: string;
   readonly result: EarningsCalculation;
   readonly mixedCrushingResult?: MixedCrushingResult | null;
   readonly formatNumber: NumberFormatter;
 }) {
   const isElapsedMode = result.comparisonMode !== 'per-minute';
   const mixedLabels = mixedCrushingUiLabels[locale];
+  const mixedCounts = mixedCrushingResult?.counts ?? null;
+  const compositionItems = mixedCounts === null
+    ? null
+    : [
+        {
+          type: 'medical',
+          label: mixedLabels.medical,
+          count: formatWhole(formatNumber, mixedCounts.medical),
+        },
+        {
+          type: 'ammunition',
+          label: mixedLabels.ammunition,
+          count: formatWhole(formatNumber, mixedCounts.ammunition),
+        },
+        {
+          type: 'military',
+          label: mixedLabels.military,
+          count: formatWhole(formatNumber, mixedCounts.military),
+        },
+      ] as const;
+  const mixedOutput = mixedCrushingResult === null
+    ? labels.notAvailable
+    : `${mixedLabels.output}: ${formatNumber(mixedCrushingResult.outputTechScrap, {
+        maximumFractionDigits: 1,
+      })} ${mixedLabels.itemUnit}`;
   const mixedValue = getMixedCrushingComparisonValue(
     mixedCrushingResult,
     result.comparisonMode,
@@ -901,12 +928,16 @@ export function EarningsOverviewResultTable({
   });
 
   return (
-    <div
-      data-result-layout="table"
-      data-comparison-mode={result.comparisonMode}
-      className="overflow-x-auto rounded-[var(--cco-card-radius)] border border-border"
-    >
-      <table className="w-full min-w-[40rem] table-fixed border-collapse text-left text-sm">
+      <div
+        data-result-layout="table"
+        data-comparison-mode={result.comparisonMode}
+        data-earnings-overview-table-scroll="true"
+        className="overflow-x-auto rounded-[var(--cco-card-radius)] border border-border"
+      >
+        <table
+          data-earnings-overview-table="true"
+          className="w-full min-w-[40rem] table-fixed border-collapse text-left text-sm"
+        >
         <colgroup>
           <col className="w-[31%]" />
           <col className="w-[14%]" />
@@ -938,20 +969,6 @@ export function EarningsOverviewResultTable({
         <tbody>
           {rows.map((row) => {
             if (row.kind === 'mixed') {
-              const counts = mixedCrushingResult?.counts;
-              const composition = counts
-                ? formatMixedCrushingMessage(mixedLabels.composition, {
-                    medical: formatWhole(formatNumber, counts.medical),
-                    ammunition: formatWhole(formatNumber, counts.ammunition),
-                    military: formatWhole(formatNumber, counts.military),
-                  })
-                : labels.notAvailable;
-              const output = mixedCrushingResult === null
-                ? labels.notAvailable
-                : `${mixedLabels.output}: ${formatNumber(
-                    mixedCrushingResult.outputTechScrap,
-                    { maximumFractionDigits: 1 },
-                  )}`;
               const displayedNet = mixedCrushingResult?.totalNetAi ?? null;
               const rate = mixedCrushingResult?.aiPerMinute ?? null;
               const isNegativeNet = displayedNet !== null && displayedNet < 0;
@@ -964,20 +981,80 @@ export function EarningsOverviewResultTable({
                   data-earnings-overview-mixed-crushing="true"
                 >
                   <th scope="row" className="px-4 py-3 font-medium text-foreground">
-                    {mixedLabels.activity}
-                    {mixedCrushingResult ? (
-                      <span className="ml-2 text-xs font-normal text-muted-foreground">
-                        {mixedCrushingResult.source === 'recommended'
-                          ? mixedLabels.recommended
-                          : mixedLabels.manual}
-                      </span>
-                    ) : null}
-                    <span className="mt-1 block text-xs font-normal leading-5 text-muted-foreground">
-                      {composition}
+                    <div className="flex flex-col items-start gap-0.5 sm:flex-row sm:items-baseline sm:gap-2">
+                      <span>{mixedLabels.activity}</span>
+                      {mixedCrushingResult ? (
+                        <ContextSheet
+                          side="center"
+                          title={mixedLabels.activity}
+                          closeLabel={closeLabel}
+                          className="h-auto max-h-[calc(100dvh-2rem)] w-[calc(100vw-1rem)] max-w-sm sm:h-auto sm:max-h-[min(80dvh,24rem)] sm:w-[min(calc(100vw-2rem),24rem)]"
+                          trigger={(
+                            <button
+                              type="button"
+                              data-mixed-crushing-details-trigger="true"
+                              className="rounded-sm text-xs font-normal text-muted-foreground underline decoration-dotted underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
+                            >
+                              {mixedCrushingResult.source === 'recommended'
+                                ? mixedLabels.recommended
+                                : mixedLabels.manual}
+                            </button>
+                          )}
+                        >
+                          <dl
+                            className="min-w-0 space-y-3"
+                            data-mixed-crushing-details-dialog="true"
+                          >
+                            {compositionItems?.map((item) => (
+                              <div
+                                key={item.type}
+                                className="flex min-w-0 items-start justify-between gap-3"
+                                data-mixed-crushing-detail-row={item.type}
+                              >
+                                <dt className="min-w-0 whitespace-normal text-muted-foreground">
+                                  {item.label}
+                                </dt>
+                                <dd className="shrink-0 whitespace-nowrap font-medium">
+                                  {item.count} {mixedLabels.itemUnit}
+                                </dd>
+                              </div>
+                            ))}
+                            <div
+                              className="flex min-w-0 items-start justify-between gap-3 border-t border-border pt-3"
+                              data-mixed-crushing-detail-output="true"
+                            >
+                              <dt className="min-w-0 whitespace-normal text-muted-foreground">
+                                {mixedLabels.output}
+                              </dt>
+                              <dd className="shrink-0 whitespace-nowrap font-medium">
+                                {formatNumber(mixedCrushingResult.outputTechScrap, {
+                                  maximumFractionDigits: 1,
+                                })} {mixedLabels.itemUnit}
+                              </dd>
+                            </div>
+                          </dl>
+                        </ContextSheet>
+                      ) : null}
+                    </div>
+                  {compositionItems ? (
+                    <div className="mt-1 hidden flex-wrap gap-x-2 text-xs font-normal leading-5 text-muted-foreground sm:flex">
+                      {compositionItems.map((item, index) => (
+                        <span key={item.type} className="whitespace-nowrap">
+                          {item.label} {item.count} {mixedLabels.itemUnit}
+                          {index < compositionItems.length - 1 ? (
+                            <span aria-hidden="true"> · </span>
+                          ) : null}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="mt-1 hidden text-xs font-normal leading-5 text-muted-foreground sm:block">
+                      {labels.notAvailable}
                     </span>
-                    <span className="block text-xs font-normal leading-5 text-muted-foreground">
-                      {output}
-                    </span>
+                  )}
+                  <span className="hidden text-xs font-normal leading-5 text-muted-foreground sm:block">
+                    {mixedOutput}
+                  </span>
                     {mixedCrushingResult?.source === 'recommended'
                       && !mixedCrushingResult.isRecommended ? (
                         <span className="block text-xs font-normal leading-5 text-muted-foreground">
@@ -1117,8 +1194,8 @@ export function EarningsOverviewResultTable({
             );
           })}
         </tbody>
-      </table>
-    </div>
+        </table>
+      </div>
   );
 }
 
@@ -1141,10 +1218,12 @@ function EmptyEarningsOverviewResult({
 export function EarningsOverviewCalculator({
   labels,
   locale,
+  closeLabel,
   numberFormatter,
 }: {
   readonly labels: EarningsOverviewToolLabels;
   readonly locale: Locale;
+  readonly closeLabel: string;
   readonly numberFormatter?: NumberFormatter;
 }) {
   const {
@@ -1324,6 +1403,7 @@ export function EarningsOverviewCalculator({
           <EarningsOverviewResultTable
             labels={labels}
             locale={locale}
+            closeLabel={closeLabel}
             result={result}
             mixedCrushingResult={displayedMixedResult}
             formatNumber={formatNumber}

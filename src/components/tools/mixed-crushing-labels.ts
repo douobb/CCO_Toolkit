@@ -9,10 +9,10 @@ export interface MixedCrushingUiLabels {
   readonly noRecommendation: string;
   readonly count: string;
   readonly timesUnit: string;
+  readonly itemUnit: string;
   readonly medical: string;
   readonly ammunition: string;
   readonly military: string;
-  readonly composition: string;
   readonly output: string;
   readonly stateHint: string;
   readonly invalidCount: string;
@@ -29,10 +29,10 @@ export const mixedCrushingUiLabels = {
     noRecommendation: '沒有正淨收益的混合組合',
     count: '壓碎次數',
     timesUnit: '次',
+    itemUnit: '個',
     medical: '醫療科技零件',
     ammunition: '彈藥科技零件',
     military: '軍用彈藥科技零件',
-    composition: '醫療 {medical} 次 · 彈藥 {ammunition} 次 · 軍用 {military} 次',
     output: '科技碎片產出',
     stateHint: '有效數量會同步到收益總覽與固定圖表。',
     invalidCount: '請輸入 0 到 {max} 的整數。',
@@ -47,10 +47,10 @@ export const mixedCrushingUiLabels = {
     noRecommendation: '没有正净收益的混合组合',
     count: '压碎次数',
     timesUnit: '次',
+    itemUnit: '个',
     medical: '医疗科技零件',
     ammunition: '弹药科技零件',
     military: '军用弹药科技零件',
-    composition: '医疗 {medical} 次 · 弹药 {ammunition} 次 · 军用 {military} 次',
     output: '科技碎片产出',
     stateHint: '有效数量会同步到收益总览与固定图表。',
     invalidCount: '请输入 0 到 {max} 的整数。',
@@ -65,10 +65,10 @@ export const mixedCrushingUiLabels = {
     noRecommendation: 'No mixed combination has positive net earnings',
     count: 'Crushing count',
     timesUnit: 'runs',
+    itemUnit: 'items',
     medical: 'Medical tech parts',
     ammunition: 'Ammunition tech parts',
     military: 'Military ammunition parts',
-    composition: 'Medical {medical} · ammunition {ammunition} · military {military}',
     output: 'Tech scrap output',
     stateHint: 'Valid counts update both the overview row and fixed chart.',
     invalidCount: 'Enter an integer from 0 to {max}.',

@@ -23,7 +23,6 @@ import {
 import { getMessages } from '@/lib/translations';
 
 import {
-  formatMixedCrushingMessage,
   mixedCrushingUiLabels,
 } from './mixed-crushing-labels';
 import {
@@ -87,6 +86,7 @@ async function mountInteractiveOverview() {
           <EarningsOverviewCalculator
             labels={getMessages('zh-tw').tools.earningsOverview}
             locale="zh-tw"
+            closeLabel={getMessages('zh-tw').context.closePanel}
           />
         </EarningsOverviewToolProvider>
       </SharedUserInputsProvider>,
@@ -97,6 +97,15 @@ async function mountInteractiveOverview() {
   });
 
   return container;
+}
+
+function createTrackedRoot() {
+  const container = document.createElement('div');
+  document.body.append(container);
+  const store = createSharedUserInputsStore({ storage: null });
+  const root = createRoot(container);
+  mountedOverviews.push({ container, root, store });
+  return { container, root };
 }
 
 async function setMixedCount(
@@ -164,14 +173,17 @@ function expectRecommendedView(container: HTMLElement, mode: EarningsComparisonM
   }
 
   const row = container.querySelector<HTMLElement>('[data-earnings-overview-mixed-crushing]');
-  const expectedComposition = formatMixedCrushingMessage(
-    mixedCrushingUiLabels['zh-tw'].composition,
-    {
-      medical: formatter(expected.counts.medical, { maximumFractionDigits: 0 }),
-      ammunition: formatter(expected.counts.ammunition, { maximumFractionDigits: 0 }),
-      military: formatter(expected.counts.military, { maximumFractionDigits: 0 }),
-    },
-  );
+  const expectedComposition = [
+    `${mixedCrushingUiLabels['zh-tw'].medical} ${formatter(expected.counts.medical, {
+      maximumFractionDigits: 0,
+    })} ${mixedCrushingUiLabels['zh-tw'].itemUnit}`,
+    `${mixedCrushingUiLabels['zh-tw'].ammunition} ${formatter(expected.counts.ammunition, {
+      maximumFractionDigits: 0,
+    })} ${mixedCrushingUiLabels['zh-tw'].itemUnit}`,
+    `${mixedCrushingUiLabels['zh-tw'].military} ${formatter(expected.counts.military, {
+      maximumFractionDigits: 0,
+    })} ${mixedCrushingUiLabels['zh-tw'].itemUnit}`,
+  ].join(' · ');
   expect(row?.textContent).toContain(mixedCrushingUiLabels['zh-tw'].recommended);
   expect(row?.textContent).toContain(expectedComposition);
   if (expected.totalNetAi !== null) {
@@ -210,7 +222,11 @@ describe('Earnings overview calculator', () => {
   it('呈現共用輸入、混合壓碎控制與 17 筆活動', () => {
     const labels = getMessages('zh-tw').tools.earningsOverview;
     const markup = renderEarningsOverview(
-      <EarningsOverviewCalculator labels={labels} locale="zh-tw" />,
+      <EarningsOverviewCalculator
+        labels={labels}
+        locale="zh-tw"
+        closeLabel={getMessages('zh-tw').context.closePanel}
+      />,
     );
 
     expect(markup).toContain('data-tool="earnings-overview"');
@@ -224,12 +240,18 @@ describe('Earnings overview calculator', () => {
     expect(markup).toContain('比較方式');
     expect(markup).toContain('15 分鐘飛逝');
     expect(markup).toContain('data-result-layout="table"');
+    expect(markup).toContain('data-earnings-overview-table="true"');
     expect(markup).toContain('data-comparison-mode="per-minute"');
     expect(markup).toContain('data-earnings-chart="true"');
     expect(markup).toContain('min-w-[40rem]');
+    expect(markup).toContain('<col class="w-[31%]"/>');
     expect(markup.match(/<tr/g)).toHaveLength(18);
     expect(markup).toContain('data-mixed-crushing-controls="true"');
     expect(markup).toContain('data-earnings-overview-mixed-crushing="true"');
+    expect(markup).toContain('data-mixed-crushing-details-trigger="true"');
+    expect(markup).toContain('aria-expanded="false"');
+    expect(markup).not.toContain('data-mixed-crushing-details-toggle');
+    expect(markup).not.toContain('data-mixed-crushing-details="true"');
     expect(markup).toContain('data-mixed-crushing-number="medical"');
     expect(markup).toContain('data-mixed-crushing-number="ammunition"');
     expect(markup).toContain('data-mixed-crushing-number="military"');
@@ -340,6 +362,7 @@ describe('Earnings overview calculator', () => {
       <EarningsOverviewResultTable
         labels={labels}
         locale="zh-tw"
+        closeLabel={getMessages('zh-tw').context.closePanel}
         result={calculation.result!}
         formatNumber={createNumberFormatter('zh-tw')}
       />,
@@ -371,6 +394,7 @@ describe('Earnings overview calculator', () => {
       <EarningsOverviewResultTable
         labels={getMessages('zh-tw').tools.earningsOverview}
         locale="zh-tw"
+        closeLabel={getMessages('zh-tw').context.closePanel}
         result={calculation.result!}
         mixedCrushingResult={mixedResult}
         formatNumber={createNumberFormatter('zh-tw')}
@@ -378,9 +402,341 @@ describe('Earnings overview calculator', () => {
     );
 
     expect(markup).toContain('data-comparison-mode="elapsed-15"');
-    expect(markup).toContain('醫療 2 次 · 彈藥 3 次 · 軍用 4 次');
-    expect(markup).toContain('科技碎片產出: 10.8');
+    expect(markup).toContain('醫療科技零件 2 個');
+    expect(markup).toContain('彈藥科技零件 3 個');
+    expect(markup).toContain('軍用彈藥科技零件 4 個');
+    expect(markup).toContain('科技碎片產出: 10.8 個');
     expect(markup).toContain('data-earnings-overview-mixed-crushing="true"');
+  });
+
+  it('推薦／手動狀態開啟具名 dialog，X、Escape 與 backdrop 關閉並返回焦點', async () => {
+    const manualCalculation = calculateEarningsOverviewTool({
+      searchLevel: '500',
+      printingLevel: '450',
+      miningLevel: '420',
+      bargainPercent: '40',
+      btcBuffPercent: '80',
+      comparisonMode: 'per-minute',
+    });
+    const manualResult = calculateManualMixedCrushing(
+      manualCalculation.result!,
+      { medical: 2, ammunition: 3, military: 4 },
+    );
+    const { container, root } = createTrackedRoot();
+    const labels = getMessages('zh-tw').tools.earningsOverview;
+    const closeLabel = getMessages('zh-tw').context.closePanel;
+
+    await act(async () => {
+      root.render(
+        <EarningsOverviewResultTable
+          labels={labels}
+          locale="zh-tw"
+          closeLabel={closeLabel}
+          result={manualCalculation.result!}
+          mixedCrushingResult={manualResult}
+          formatNumber={createNumberFormatter('zh-tw')}
+        />,
+      );
+    });
+
+    const trigger = container.querySelector<HTMLButtonElement>(
+      '[data-mixed-crushing-details-trigger="true"]',
+    )!;
+    expect(trigger.textContent).toBe(mixedCrushingUiLabels['zh-tw'].manual);
+    const mixedRow = container.querySelector<HTMLElement>(
+      '[data-earnings-overview-mixed-crushing="true"]',
+    )!;
+    expect(mixedRow.textContent?.split(mixedCrushingUiLabels['zh-tw'].manual)).toHaveLength(2);
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    expect(document.body.querySelector('[role="dialog"]')).toBeNull();
+
+    trigger.focus();
+    await act(async () => {
+      trigger.click();
+      await Promise.resolve();
+    });
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+    let dialog = document.body.querySelector<HTMLElement>('[role="dialog"]');
+    expect(dialog).not.toBeNull();
+    const titleId = dialog?.getAttribute('aria-labelledby');
+    expect(titleId).not.toBeNull();
+    expect(document.getElementById(titleId!)?.textContent)
+      .toBe(mixedCrushingUiLabels['zh-tw'].activity);
+    expect(dialog?.querySelector('[data-mixed-crushing-details-dialog="true"]'))
+      .not.toBeNull();
+
+    const closeButton = dialog?.querySelector<HTMLButtonElement>(
+      `[aria-label="${closeLabel}"]`,
+    );
+    expect(closeButton).not.toBeNull();
+    await act(async () => {
+      closeButton?.click();
+      await Promise.resolve();
+    });
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(trigger);
+
+    await act(async () => {
+      trigger.click();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await Promise.resolve();
+    });
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(trigger);
+
+    await act(async () => {
+      trigger.click();
+      await Promise.resolve();
+    });
+    const backdrop = document.body.querySelector<HTMLElement>('.bg-fd-overlay');
+    expect(backdrop).not.toBeNull();
+    await act(async () => {
+      backdrop?.click();
+      await Promise.resolve();
+    });
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(trigger);
+    dialog = document.body.querySelector<HTMLElement>('[role="dialog"]');
+    expect(dialog).toBeNull();
+  });
+
+  it('明細四項使用 itemUnit、推薦/手動/飛逝變更即時同步且無效時清除 dialog', async () => {
+    const manualCalculation = calculateEarningsOverviewTool({
+      searchLevel: '500',
+      printingLevel: '450',
+      miningLevel: '420',
+      bargainPercent: '40',
+      btcBuffPercent: '80',
+      comparisonMode: 'per-minute',
+    });
+    const manualResult = calculateManualMixedCrushing(
+      manualCalculation.result!,
+      { medical: 2, ammunition: 3, military: 4 },
+    );
+    const { container, root } = createTrackedRoot();
+    const labels = getMessages('zh-tw').tools.earningsOverview;
+    const closeLabel = getMessages('zh-tw').context.closePanel;
+    const formatNumber = createNumberFormatter('zh-tw');
+
+    await act(async () => {
+      root.render(
+        <EarningsOverviewResultTable
+          labels={labels}
+          locale="zh-tw"
+          closeLabel={closeLabel}
+          result={manualCalculation.result!}
+          mixedCrushingResult={manualResult}
+          formatNumber={formatNumber}
+        />,
+      );
+    });
+
+    const trigger = container.querySelector<HTMLButtonElement>(
+      '[data-mixed-crushing-details-trigger="true"]',
+    )!;
+    expect(trigger.textContent).toBe(mixedCrushingUiLabels['zh-tw'].manual);
+    await act(async () => {
+      trigger.click();
+      await Promise.resolve();
+    });
+    let dialog = document.body.querySelector<HTMLElement>('[role="dialog"]')!;
+    const detailList = dialog.querySelector<HTMLElement>(
+      '[data-mixed-crushing-details-dialog="true"]',
+    )!;
+    const scrollContainer = container.querySelector<HTMLElement>(
+      '[data-earnings-overview-table-scroll="true"]',
+    )!;
+    const overviewTable = scrollContainer.querySelector<HTMLTableElement>(
+      'table[data-earnings-overview-table="true"]',
+    )!;
+    expect(detailList.closest('[data-result-layout="table"]')).toBeNull();
+    expect(Array.from(overviewTable.querySelectorAll('tbody td'))
+      .every((cell) => cell.classList.contains('whitespace-nowrap'))).toBe(true);
+    expect(detailList.querySelectorAll('[data-mixed-crushing-detail-row]')).toHaveLength(3);
+    expect(detailList.querySelector('[data-mixed-crushing-detail-row="medical"]')?.textContent)
+      .toContain('2 個');
+    expect(detailList.querySelector('[data-mixed-crushing-detail-row="ammunition"]')?.textContent)
+      .toContain('3 個');
+    expect(detailList.querySelector('[data-mixed-crushing-detail-row="military"]')?.textContent)
+      .toContain('4 個');
+    expect(detailList.querySelector('[data-mixed-crushing-detail-output]')?.textContent)
+      .toContain('10.8 個');
+    expect(overviewTable.querySelector('[data-earnings-overview-mixed-crushing]')?.textContent)
+      .toContain('9 次');
+
+    const elapsedCalculation = calculateEarningsOverviewTool({
+      searchLevel: '500',
+      printingLevel: '450',
+      miningLevel: '420',
+      bargainPercent: '40',
+      btcBuffPercent: '80',
+      comparisonMode: 'elapsed-15',
+    });
+    const recommendedResult = calculateRecommendedMixedCrushing(elapsedCalculation.result!);
+    await act(async () => {
+      root.render(
+        <EarningsOverviewResultTable
+          labels={labels}
+          locale="zh-tw"
+          closeLabel={closeLabel}
+          result={elapsedCalculation.result!}
+          mixedCrushingResult={recommendedResult}
+          formatNumber={formatNumber}
+        />,
+      );
+    });
+    expect(container.querySelector('[data-comparison-mode="elapsed-15"]')).not.toBeNull();
+    expect(container.querySelector('[data-mixed-crushing-details-trigger="true"]')?.textContent)
+      .toBe(mixedCrushingUiLabels['zh-tw'].recommended);
+    const mixedRow = container.querySelector<HTMLElement>(
+      '[data-earnings-overview-mixed-crushing="true"]',
+    )!;
+    expect(mixedRow.textContent?.split(mixedCrushingUiLabels['zh-tw'].recommended))
+      .toHaveLength(2);
+    dialog = document.body.querySelector<HTMLElement>('[role="dialog"]')!;
+    const recommendedList = dialog.querySelector<HTMLElement>(
+      '[data-mixed-crushing-details-dialog="true"]',
+    )!;
+    expect(recommendedList.querySelector('[data-mixed-crushing-detail-row="medical"]')?.textContent)
+      .toContain(`${formatNumber(recommendedResult!.counts.medical, { maximumFractionDigits: 0 })} 個`);
+    expect(recommendedList.querySelector('[data-mixed-crushing-detail-output]')?.textContent)
+      .toContain(`${formatNumber(recommendedResult!.outputTechScrap, { maximumFractionDigits: 1 })} 個`);
+
+    const revisedManualResult = calculateManualMixedCrushing(
+      elapsedCalculation.result!,
+      { medical: 1, ammunition: 0, military: 2 },
+    );
+    await act(async () => {
+      root.render(
+        <EarningsOverviewResultTable
+          labels={labels}
+          locale="zh-tw"
+          closeLabel={closeLabel}
+          result={elapsedCalculation.result!}
+          mixedCrushingResult={revisedManualResult}
+          formatNumber={formatNumber}
+        />,
+      );
+    });
+    expect(container.querySelector('[data-mixed-crushing-details-trigger="true"]')?.textContent)
+      .toBe(mixedCrushingUiLabels['zh-tw'].manual);
+    dialog = document.body.querySelector<HTMLElement>('[role="dialog"]')!;
+    expect(dialog.querySelector('[data-mixed-crushing-detail-row="medical"]')?.textContent)
+      .toContain('1 個');
+    expect(dialog.querySelector('[data-mixed-crushing-detail-row="military"]')?.textContent)
+      .toContain('2 個');
+
+    await act(async () => {
+      root.render(
+        <EarningsOverviewResultTable
+          labels={labels}
+          locale="zh-tw"
+          closeLabel={closeLabel}
+          result={elapsedCalculation.result!}
+          mixedCrushingResult={null}
+          formatNumber={formatNumber}
+        />,
+      );
+      await Promise.resolve();
+    });
+    expect(container.querySelector('[data-mixed-crushing-details-trigger]')).toBeNull();
+    expect(document.body.querySelector('[data-mixed-crushing-details-dialog]')).toBeNull();
+    expect(document.body.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it('320px 中英文明細允許名稱換行、數量不拆行且彈窗採緊湊尺寸', async () => {
+    const calculation = calculateEarningsOverviewTool({
+      searchLevel: '500',
+      printingLevel: '450',
+      miningLevel: '420',
+      bargainPercent: '40',
+      btcBuffPercent: '80',
+      comparisonMode: 'per-minute',
+    });
+    const mixedResult = calculateManualMixedCrushing(
+      calculation.result!,
+      { medical: 0, ammunition: 0, military: 1000 },
+    );
+    const { container, root } = createTrackedRoot();
+    const closeLabel = getMessages('en').context.closePanel;
+
+    await act(async () => {
+      root.render(
+        <EarningsOverviewResultTable
+          labels={getMessages('en').tools.earningsOverview}
+          locale="en"
+          closeLabel={closeLabel}
+          result={calculation.result!}
+          mixedCrushingResult={mixedResult}
+          formatNumber={createNumberFormatter('en')}
+        />,
+      );
+    });
+    const trigger = container.querySelector<HTMLButtonElement>(
+      '[data-mixed-crushing-details-trigger="true"]',
+    )!;
+    await act(async () => {
+      trigger.click();
+      await Promise.resolve();
+    });
+
+    const dialog = document.body.querySelector<HTMLElement>('[role="dialog"]')!;
+    const militaryRow = dialog.querySelector<HTMLElement>(
+      '[data-mixed-crushing-detail-row="military"]',
+    )!;
+    expect(militaryRow.querySelector('dt')?.textContent)
+      .toBe(mixedCrushingUiLabels.en.military);
+    expect(militaryRow.querySelector('dt')?.classList.contains('whitespace-normal')).toBe(true);
+    expect(militaryRow.querySelector('dd')?.textContent).toBe('1,000 items');
+    expect(militaryRow.querySelector('dd')?.classList.contains('whitespace-nowrap')).toBe(true);
+    expect(dialog.classList.contains('h-auto')).toBe(true);
+    expect(dialog.classList.contains('max-w-sm')).toBe(true);
+    expect(dialog.className).toContain('w-[calc(100vw-1rem)]');
+    expect(dialog.className).toContain('sm:max-h-[min(80dvh,24rem)]');
+    expect(container.querySelector('[data-earnings-overview-mixed-crushing]')?.textContent)
+      .toContain('1,000 runs');
+
+    const closeButton = dialog.querySelector<HTMLButtonElement>(
+      `[aria-label="${closeLabel}"]`,
+    )!;
+    await act(async () => {
+      closeButton.click();
+      await Promise.resolve();
+    });
+    const chineseCloseLabel = getMessages('zh-tw').context.closePanel;
+    await act(async () => {
+      root.render(
+        <EarningsOverviewResultTable
+          labels={getMessages('zh-tw').tools.earningsOverview}
+          locale="zh-tw"
+          closeLabel={chineseCloseLabel}
+          result={calculation.result!}
+          mixedCrushingResult={mixedResult}
+          formatNumber={createNumberFormatter('zh-tw')}
+        />,
+      );
+    });
+    const chineseTrigger = container.querySelector<HTMLButtonElement>(
+      '[data-mixed-crushing-details-trigger="true"]',
+    )!;
+    await act(async () => {
+      chineseTrigger.click();
+      await Promise.resolve();
+    });
+    const chineseDialog = document.body.querySelector<HTMLElement>('[role="dialog"]')!;
+    const chineseMilitaryRow = chineseDialog.querySelector<HTMLElement>(
+      '[data-mixed-crushing-detail-row="military"]',
+    )!;
+    expect(chineseMilitaryRow.querySelector('dt')?.textContent)
+      .toBe(mixedCrushingUiLabels['zh-tw'].military);
+    expect(chineseMilitaryRow.querySelector('dt')?.classList.contains('whitespace-normal'))
+      .toBe(true);
+    expect(chineseMilitaryRow.querySelector('dd')?.textContent).toBe('1,000 個');
+    expect(chineseMilitaryRow.querySelector('dd')?.classList.contains('whitespace-nowrap'))
+      .toBe(true);
   });
 
   it('無效手動數量提示錯誤、不保存，且總覽與固定圖表不比較該草稿', async () => {
@@ -407,10 +763,11 @@ describe('Earnings overview calculator', () => {
       root.render(
         <SharedUserInputsProvider store={store}>
           <EarningsOverviewToolProvider>
-            <EarningsOverviewCalculator
-              labels={getMessages('zh-tw').tools.earningsOverview}
-              locale="zh-tw"
-            />
+          <EarningsOverviewCalculator
+            labels={getMessages('zh-tw').tools.earningsOverview}
+            locale="zh-tw"
+            closeLabel={getMessages('zh-tw').context.closePanel}
+          />
           </EarningsOverviewToolProvider>
         </SharedUserInputsProvider>,
       );
@@ -574,7 +931,11 @@ describe('Earnings overview calculator', () => {
     for (const locale of ['zh-tw', 'zh-cn', 'en'] as const) {
       const labels = getMessages(locale).tools.earningsOverview;
       const markup = renderEarningsOverview(
-        <EarningsOverviewCalculator labels={labels} locale={locale} />,
+        <EarningsOverviewCalculator
+          labels={labels}
+          locale={locale}
+          closeLabel={getMessages(locale).context.closePanel}
+        />,
       );
 
       expect(markup).toContain(labels.comparisonMode);
@@ -583,6 +944,8 @@ describe('Earnings overview calculator', () => {
       expect(markup).toContain(labels.trendGroup);
       expect(markup).toContain(labels.trendInteractionHint);
       expect(markup).toContain(mixedCrushingUiLabels[locale].recommended);
+      expect(markup).toContain(mixedCrushingUiLabels[locale].itemUnit);
+      expect(markup).not.toContain('Details');
       expect(markup).toContain(mixedCrushingUiLabels[locale].manualControls);
       expect(markup).not.toContain('checkbox');
       expect(markup).not.toContain('勾選');

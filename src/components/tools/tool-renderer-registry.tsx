@@ -249,7 +249,11 @@ const toolRenderers: Readonly<Record<string, ToolRenderer>> = {
         header={<ToolHeader page={page} locale={locale} labels={messages.articleMetadata} />}
         headerActions={<MarkdownCopyButton markdownUrl={markdownUrl} />}
       >
-        <EarningsOverviewCalculator labels={labels} locale={locale} />
+        <EarningsOverviewCalculator
+          labels={labels}
+          locale={locale}
+          closeLabel={messages.context.closePanel}
+        />
         {body}
       </EarningsOverviewToolPage>
     );

@@ -103,3 +103,73 @@ table:not([data-sticky-first-column='false'])
     word-break: normal;
   }
 }
+
+/* 手機收益總覽固定首欄；比共用 sticky 規則更具體，僅覆寫這一張表。 */
+@media (max-width: 639.98px) {
+  table[data-earnings-overview-table='true'] > colgroup > col:nth-child(1) {
+    width: 140px;
+  }
+
+  table[data-earnings-overview-table='true'] > colgroup > col:nth-child(2) {
+    width: 100px;
+  }
+
+  table[data-earnings-overview-table='true'] > colgroup > col:nth-child(3) {
+    width: 105px;
+  }
+
+  table[data-earnings-overview-table='true'] > colgroup > col:nth-child(4) {
+    width: 135px;
+  }
+
+  table[data-earnings-overview-table='true'] > colgroup > col:nth-child(5) {
+    width: 160px;
+  }
+
+  table[data-earnings-overview-table='true']:not([data-sticky-first-column='false'])
+    tr
+    > :is(th, td) {
+    padding-inline: 12px;
+  }
+
+  table[data-earnings-overview-table='true']:not([data-sticky-first-column='false'])
+    tr
+    > :is(th, td):first-child:not([colspan]:not([colspan='1'])) {
+    width: 140px;
+    min-width: 140px;
+    max-width: 140px;
+    white-space: normal;
+    overflow-wrap: normal;
+    word-break: normal;
+  }
+}
+
+@media (max-width: 359.98px) {
+  table[data-earnings-overview-table='true'] > colgroup > col:nth-child(1) {
+    width: 128px;
+  }
+
+  table[data-earnings-overview-table='true'] > colgroup > col:nth-child(5) {
+    width: 172px;
+  }
+
+  table[data-earnings-overview-table='true']:not([data-sticky-first-column='false'])
+    tr
+    > :is(th, td):first-child:not([colspan]:not([colspan='1'])) {
+    width: 128px;
+    min-width: 128px;
+    max-width: 128px;
+  }
+}
+
+/* 640px 起回到收益表原有百分比欄寬，並抵銷共用 max-width: 640px 換行限制。 */
+@media (min-width: 640px) {
+  table[data-earnings-overview-table='true']:not([data-sticky-first-column='false'])
+    tr
+    > :is(th, td):first-child:not([colspan]:not([colspan='1'])) {
+    min-width: unset;
+    max-width: unset;
+    overflow-wrap: normal;
+    word-break: normal;
+  }
+}

@@ -3,12 +3,16 @@ import type { ReactNode } from 'react';
 import { describe, expect, it } from 'vitest';
 import { vi } from 'vitest';
 
-vi.mock('@/components/context', () => ({
-  ContextualDocsPage: ({ children }: { children: ReactNode }) => (
-    <div>{children}</div>
-  ),
-  ContextMobileItems: () => null,
-}));
+vi.mock('@/components/context', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/components/context')>();
+  return {
+    ...actual,
+    ContextualDocsPage: ({ children }: { children: ReactNode }) => (
+      <div>{children}</div>
+    ),
+    ContextMobileItems: () => null,
+  };
+});
 
 import {
   getToolRenderer,

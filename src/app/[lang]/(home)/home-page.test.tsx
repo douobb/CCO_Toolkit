@@ -157,6 +157,13 @@ describe('home page information architecture', () => {
         expect(anchor).not.toContain('mt-5');
       }
     }
+    for (const href of ['/zh-tw/tools', '/zh-tw/guides']) {
+      const card = markup.match(new RegExp(`<a(?=[^>]*href="${href}")[^>]*>[\\s\\S]*?<\\/a>`))?.[0];
+      const headingClasses = card?.match(/<h2\b[^>]*class="([^"]+)"/)?.[1]?.split(' ') ?? [];
+
+      expect(headingClasses).toContain('site-home-section-heading');
+      expect(headingClasses).toContain('font-semibold');
+    }
     expect(markup).not.toContain('查看所有工具');
     expect(markup).not.toContain('瀏覽教學');
     expect(markup).not.toContain('開啟玩家設定');
@@ -282,10 +289,15 @@ describe('home page information architecture', () => {
     ]));
 
     for (const href of ['/zh-tw/blog', '/zh-tw/recommendations', '/zh-tw/about']) {
-      const secondaryCard = markup.match(new RegExp(`<a(?=[^>]*href="${href}")[^>]*>`))?.[0];
+      const secondaryCard = markup.match(
+        new RegExp(`<a(?=[^>]*href="${href}")[^>]*>[\\s\\S]*?<\\/a>`),
+      )?.[0];
+      const headingClasses = secondaryCard?.match(/<h3\b[^>]*class="([^"]+)"/)?.[1]?.split(' ') ?? [];
 
       expect(secondaryCard).toContain('p-5');
       expect(secondaryCard).not.toContain('sm:p-8');
+      expect(headingClasses).toContain('font-semibold');
+      expect(headingClasses).not.toContain('site-home-section-heading');
     }
     expect(markup).toContain('<section aria-labelledby="home-secondary-heading" class="mt-8 sm:mt-12">');
     expect(markup).toContain('class="mt-6 grid gap-3 sm:grid-cols-3"');

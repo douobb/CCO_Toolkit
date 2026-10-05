@@ -129,6 +129,13 @@ h3[data-site-article-heading] {
     0 0 10px rgb(227 212 73 / 0.18);
 }
 
+@media (max-width: 639.98px) {
+  .site-home-section-heading,
+  .site-tool-section-heading {
+    font-weight: 700;
+  }
+}
+
 @media (forced-colors: active) {
   .site-title-glow,
   [data-site-article-heading],
