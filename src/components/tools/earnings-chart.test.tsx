@@ -500,7 +500,7 @@ describe('Earnings trend chart', () => {
     await unmount(root);
   });
 
-  it('切換 Tabs 無例外、清除 hover 與系列提示並保留 pin', async () => {
+  it('切換 Tabs 無例外、清除 hover 與系列提示並保留移動後的 pin', async () => {
     const { container, root } = await renderChart();
     const errors: unknown[] = [];
     const recordError = (event: ErrorEvent) => errors.push(event.error);
@@ -518,7 +518,7 @@ describe('Earnings trend chart', () => {
           bubbles: true, detail: 1, clientX: 498, clientY: 160,
         }));
       });
-      const pinnedLevel = svg.getAttribute('data-active-level');
+      const clickedLevel = svg.getAttribute('data-active-level');
       const dimensions = getEarningsChartDimensions(960);
       const yMin = Number(svg.getAttribute('data-chart-y-min'));
       const yMax = Number(svg.getAttribute('data-chart-y-max'));
@@ -532,6 +532,7 @@ describe('Earnings trend chart', () => {
         }));
       });
       expect(svg.getAttribute('data-active-level')).toBe('1');
+      expect(svg.getAttribute('data-active-level')).not.toBe(clickedLevel);
       expect(container.querySelector('[data-earnings-chart-hover-callout]')).not.toBeNull();
       const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
       const fixedTab = tabs.find((tab) => tab.textContent === labels.trendGroupFixed)!;
@@ -541,7 +542,7 @@ describe('Earnings trend chart', () => {
       await expect(act(async () => variableTab.click())).resolves.toBeUndefined();
       expect(errors).toEqual([]);
       expect(container.querySelector('svg[tabindex="0"]')?.getAttribute('data-active-level'))
-        .toBe(pinnedLevel);
+        .toBe('1');
       expect(container.querySelector('[data-earnings-chart-hover-callout]')).toBeNull();
     } finally {
       window.removeEventListener('error', recordError);
@@ -549,7 +550,7 @@ describe('Earnings trend chart', () => {
     }
   });
 
-  it('觸控放開清除系列提示但保留預覽，拖曳／取消不 pin，點按才鎖定', async () => {
+  it('觸控拖曳／取消不 pin；點按鎖定後滑鼠與觸控移動都保留新位置', async () => {
     const { container, root } = await renderChart();
     const svg = container.querySelector<SVGSVGElement>('svg[tabindex="0"]')!;
     const interactionLayer = container.querySelector<SVGRectElement>(
@@ -591,6 +592,7 @@ describe('Earnings trend chart', () => {
       await act(async () => {
         interactionLayer.dispatchEvent(new PointerEvent('pointermove', {
           bubbles: true,
+          pointerType: 'mouse',
           clientX: xAt(level),
           clientY: yAtSearch(level),
         }));
@@ -633,7 +635,15 @@ describe('Earnings trend chart', () => {
       click(250);
     });
     await hover(400);
-    expect(svg.getAttribute('data-active-level')).toBe('250');
+    expect(svg.getAttribute('data-active-level')).toBe('400');
+
+    await act(async () => {
+      dispatchTouchPointer(svg, 'pointerdown', 400, yAtSearch(400), 30);
+      dispatchTouchPointer(interactionLayer, 'pointermove', 450, yAtSearch(450), 30);
+      dispatchTouchPointer(svg, 'pointerup', 450, yAtSearch(450), 30);
+      interactionLayer.dispatchEvent(new PointerEvent('pointerout', { bubbles: true }));
+    });
+    expect(svg.getAttribute('data-active-level')).toBe('450');
 
     await act(async () => root.unmount());
   });

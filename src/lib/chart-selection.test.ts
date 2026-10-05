@@ -21,7 +21,7 @@ describe('chart selection state', () => {
     )).toBe(42);
   });
 
-  it('hover 優先於鍵盤記憶，離開後有 pin 就恢復 pin', () => {
+  it('hover 優先於鍵盤記憶；已有 pin 時移動同步更新並在離開後保留', () => {
     const pinned = reduceChartSelection(initialChartSelectionState, {
       type: 'pin',
       index: 18,
@@ -39,7 +39,7 @@ describe('chart selection state', () => {
     expect(getChartSelectionIndex(
       reduceChartSelection(hovered, { type: 'pointer-leave' }),
       10,
-    )).toBe(18);
+    )).toBe(36);
   });
 
   it('觸控放開可保留 preview，取消或拖動不符合點按距離', () => {

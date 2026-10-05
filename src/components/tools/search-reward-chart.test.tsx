@@ -492,7 +492,7 @@ describe('Search Reward chart UI', () => {
     store.dispose();
   });
 
-  it('離開時保留最後檢視或恢復 pin，觸控拖曳與取消不會誤鎖定', async () => {
+  it('保留最後檢視；既有 pin 隨滑鼠／觸控移動並在離開或放開後留在新位置', async () => {
     const store = createSharedUserInputsStore({ storage: null });
     const container = document.createElement('div');
     document.body.append(container);
@@ -598,12 +598,22 @@ describe('Search Reward chart UI', () => {
     await act(async () => {
       svg.dispatchEvent(new PointerEvent('pointermove', {
         bubbles: true,
+        pointerType: 'mouse',
         clientX: xAt(20),
         clientY: 120,
       }));
       svg.dispatchEvent(new PointerEvent('pointerout', { bubbles: true }));
     });
-    expect(details()).toBe(pinnedDetails);
+    const mouseMovedDetails = details();
+    expect(mouseMovedDetails).not.toBe(pinnedDetails);
+
+    await act(async () => {
+      dispatchTouchPointer('pointerdown', xAt(20), 120, 20);
+      dispatchTouchPointer('pointermove', xAt(30), 130, 20);
+      dispatchTouchPointer('pointerup', xAt(30), 130, 20);
+      svg.dispatchEvent(new PointerEvent('pointerout', { bubbles: true }));
+    });
+    expect(details()).not.toBe(mouseMovedDetails);
     await act(async () => {
       svg.focus();
       svg.dispatchEvent(new KeyboardEvent('keydown', {

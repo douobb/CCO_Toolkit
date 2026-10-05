@@ -20,7 +20,7 @@ export const initialChartSelectionState: ChartSelectionState = {
   previewIndex: null,
 };
 
-/** 共用兩張圖的 hover、鍵盤檢視、點擊鎖定與 Escape 重設狀態。 */
+/** 共用兩張圖的選取狀態；移動中的指標會同步更新既有鎖定位置。 */
 export function reduceChartSelection(
   state: ChartSelectionState,
   action: ChartSelectionAction,
@@ -31,6 +31,7 @@ export function reduceChartSelection(
         ...state,
         pointerIndex: action.index,
         keyboardIndex: null,
+        pinnedIndex: state.pinnedIndex === null ? null : action.index,
         previewIndex: action.index,
       };
     case 'pointer-leave':
@@ -61,7 +62,7 @@ export function reduceChartSelection(
   }
 }
 
-/** 指標暫時預覽優先；離開後恢復 pin，否則保留最近檢視或預設等級。 */
+/** 指標暫時預覽優先；離開後顯示最新 pin，未鎖定時保留最近檢視或預設等級。 */
 export function getChartSelectionIndex(
   state: ChartSelectionState,
   defaultIndex: number | null,
