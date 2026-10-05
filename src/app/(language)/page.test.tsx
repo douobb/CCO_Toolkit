@@ -51,9 +51,40 @@ describe('root language route', () => {
     expect(rootMarkup).toContain('href="/zh-tw/tools"');
     expect(rootMarkup).toContain('href="/zh-tw/guides"');
     expect(rootMarkup).toContain('href="/zh-tw/settings"');
+    const summaryCards = rootMarkup.match(
+      /<div(?=[^>]*data-home-summary-cards="true")[^>]*>([\s\S]*?)<\/div>\s*<section aria-labelledby="home-secondary-heading"/,
+    )?.[1];
+    const settingsCard = rootMarkup.match(
+      /<a(?=[^>]*href="\/zh-tw\/settings")[^>]*>[\s\S]*?<\/a>/,
+    )?.[0];
+    expect(summaryCards).toContain('href="/zh-tw/settings"');
+    expect(summaryCards).toContain('data-contribution-card="true"');
+    expect(settingsCard).toContain('size-5');
+    expect(settingsCard).toContain('aria-hidden="true"');
     expect(rootMarkup).not.toContain('更多資源');
+    expect(rootMarkup).toContain('貢獻看板');
+    expect(rootMarkup).toContain('投稿指南');
     expect(rootMarkup).toMatch(/<h2 id="home-secondary-heading" class="[^"]*site-home-section-heading/);
     expect(rootMarkup).not.toContain('前往繁體中文首頁');
+    const contributionCounts = rootMarkup.match(/<dl data-contribution-counts[^>]*>[\s\S]*?<\/dl>/)?.[0];
+    expect(contributionCounts?.match(/<dd[^>]*>0<\/dd>/g)).toHaveLength(2);
+    expect(contributionCounts).toContain('whitespace-nowrap');
+    expect(contributionCounts).not.toMatch(/justify-between|rounded-|border-fd-border|bg-fd-card/);
+
+    const contributionActions = [
+      ['/zh-tw/about/contribution-board', 'bg-fd-primary'],
+      ['/zh-tw/about/contributing', 'bg-fd-card'],
+    ] as const;
+    for (const [href, variantClass] of contributionActions) {
+      const action = rootMarkup.match(
+        new RegExp(`<a(?=[^>]*href="${href}")[^>]*>[\\s\\S]*?<\\/a>`),
+      )?.[0];
+
+      expect(action).toBeDefined();
+      expect(action).not.toMatch(/<svg/);
+      expect(action).toContain('min-h-11');
+      expect(action).toContain(variantClass);
+    }
 
     const links = Array.from(rootMarkup.matchAll(/href="([^"]+)"/g), (match) => match[1]);
     expect(links.length).toBeGreaterThan(0);

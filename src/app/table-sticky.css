@@ -58,3 +58,48 @@ table:not([data-sticky-first-column='false'])
     overflow-wrap: anywhere;
   }
 }
+
+/* Game Data 版本表只在指定邊界換行，避免共用手機規則拆散識別碼。 */
+[data-game-data-version-table] > table {
+  width: 100%;
+  min-width: 59.75rem;
+  table-layout: fixed;
+}
+
+[data-game-data-version-table] > table:not([data-sticky-first-column='false'])
+  tr
+  > :is(th, td) {
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+[data-game-data-version-table] > table:not([data-sticky-first-column='false'])
+  tr
+  > :is(th, td):nth-child(6) {
+  white-space: normal;
+}
+
+[data-game-data-version-table] > table:not([data-sticky-first-column='false'])
+  tr
+  > :is(th, td):first-child:not([colspan]:not([colspan='1'])) {
+  width: 9.375rem;
+  min-width: 9.375rem;
+  max-width: 9.375rem;
+  white-space: normal;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+@media (max-width: 640px) {
+  [data-game-data-version-table] > table:not([data-sticky-first-column='false'])
+    tr
+    > :is(th, td):first-child:not([colspan]:not([colspan='1'])) {
+    width: 9.375rem;
+    min-width: 9.375rem;
+    max-width: 9.375rem;
+    white-space: normal;
+    overflow-wrap: normal;
+    word-break: normal;
+  }
+}

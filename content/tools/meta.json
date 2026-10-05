@@ -1,6 +1,6 @@
 {
   "title": "工具",
-  "description": "CyberCode Online 的互動計算工具。",
+  "description": "互動計算工具",
   "root": true,
   "pagesIndex": "index",
   "pages": [

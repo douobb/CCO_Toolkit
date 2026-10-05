@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import type { KeyboardEvent } from 'react';
+import { useEffect, useId, useMemo, useReducer, useRef, useState } from 'react';
+import type { KeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
 
 import {
   Card,
@@ -16,10 +16,19 @@ import {
   getChartTickTextAnchor,
   getResponsiveChartDimensions,
 } from '@/lib/chart-layout';
+import {
+  getChartSelectionIndex,
+  hasChartTouchGestureMoved,
+  initialChartSelectionState,
+  reduceChartSelection,
+} from '@/lib/chart-selection';
 import { getChartViewportTicks } from '@/lib/chart-viewport';
 import { defaultSearchRewards } from '@/lib/search-reward';
 import {
   deriveSearchRewardChartData,
+  findNearestSearchRewardChartSeries,
+  getSearchRewardChartCalloutLayout,
+  getSearchRewardChartCalloutPosition,
   type SearchRewardChartData,
   type SearchRewardChartMetric,
   type SearchRewardChartPoint,
@@ -251,7 +260,13 @@ function SearchRewardChartSvg({
   const yAxisLabel = metric === 'value' ? labels.chartAxisValue : labels.chartAxisQuantity;
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartClipPathId = `search-reward-chart-plot-${useId()}`;
-  const pointRefs = useRef<Array<SVGCircleElement | null>>([]);
+  const touchGestureRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    moved: boolean;
+  } | null>(null);
+  const suppressTouchClickRef = useRef(false);
   const [containerWidth, setContainerWidth] = useState(chartDefaultWidth);
   const chartDimensions = getSearchRewardChartDimensions(containerWidth);
   const chartPlotWidth = chartDimensions.width - chartDimensions.left - chartDimensions.right;
@@ -275,12 +290,41 @@ function SearchRewardChartSvg({
   const levelTicks = getChartViewportTicks(viewportControls.viewport).map(Math.round);
   const valueTicks = getAxisTicks(0, valueRange);
   const activePoint = activePointIndex === null ? undefined : data.points[activePointIndex];
+  const [hoveredSeriesId, setHoveredSeriesId] = useState<ChartSeriesId | null>(null);
+  const hoveredSeries = hoveredSeriesId === null
+    ? undefined
+    : series.find((item) => item.id === hoveredSeriesId);
+  const hoveredSeriesValue = activePoint && hoveredSeries
+    ? hoveredSeries.getValue(activePoint)
+    : null;
+  const hoveredSeriesDisplayValue = hoveredSeriesValue === null
+    ? null
+    : metric === 'value'
+      ? `${formatDataValue(formatNumber, hoveredSeriesValue)} ${labels.expectedValueUnit}`
+      : formatDataValue(formatNumber, hoveredSeriesValue);
+  const hoveredSeriesCalloutLayout = hoveredSeries && hoveredSeriesDisplayValue !== null
+    ? getSearchRewardChartCalloutLayout(
+      hoveredSeries.label,
+      hoveredSeriesDisplayValue,
+      chartPlotWidth,
+    )
+    : null;
+  const hoveredSeriesCallout = activePoint && hoveredSeries && hoveredSeriesValue !== null
+    && hoveredSeriesCalloutLayout
+    ? getSearchRewardChartCalloutPosition({
+      pointX: xForLevel(activePoint.level),
+      pointY: yForValue(hoveredSeriesValue),
+      calloutWidth: hoveredSeriesCalloutLayout.width,
+      calloutHeight: hoveredSeriesCalloutLayout.height,
+      minX: chartDimensions.left,
+      maxX: chartDimensions.width - chartDimensions.right,
+      minY: chartDimensions.top,
+      maxY: chartDimensions.top + chartPlotHeight,
+    })
+    : null;
   const tabEntryIndex = activePointIndex
     ?? getNearestPointIndex(data.points, currentLevel)
     ?? 0;
-  const selectedSeriesValue = activePoint
-    ? Math.max(...series.map((item) => item.getValue(activePoint)))
-    : null;
   const currentX = currentLevel === null
     || currentLevel < visibleMinLevel
     || currentLevel > visibleMaxLevel
@@ -291,6 +335,84 @@ function SearchRewardChartSvg({
   const currentLevelLabelX = currentX === null
     ? null
     : currentX + (currentLevelLabelUsesStartAnchor ? 10 : -10);
+
+  const handlePointerDown = (event: ReactPointerEvent<SVGSVGElement>) => {
+    suppressTouchClickRef.current = false;
+    if (event.pointerType !== 'touch') return;
+    touchGestureRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      moved: false,
+    };
+  };
+
+  const handlePointerMove = (event: ReactPointerEvent<SVGSVGElement>) => {
+    const gesture = touchGestureRef.current;
+    if (gesture?.pointerId === event.pointerId && !gesture.moved
+      && hasChartTouchGestureMoved(
+        gesture.startX,
+        gesture.startY,
+        event.clientX,
+        event.clientY,
+      )) {
+      touchGestureRef.current = { ...gesture, moved: true };
+    }
+
+    if (!isClientPointInChartPlot(
+      event.clientX,
+      event.clientY,
+      event.currentTarget,
+      chartDimensions,
+    )) {
+      onHoverPoint(null);
+      setHoveredSeriesId(null);
+      return;
+    }
+
+    const index = getNearestPointFromClientX(event.clientX, event.currentTarget);
+    if (index === null) {
+      onHoverPoint(null);
+      setHoveredSeriesId(null);
+      return;
+    }
+
+    onHoverPoint(index);
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const pointerY = ((event.clientY - bounds.top) / Math.max(1, bounds.height))
+      * chartDimensions.height;
+    const point = data.points[index];
+    const target = point
+      ? findNearestSearchRewardChartSeries(
+        series.map((item) => ({ id: item.id, value: item.getValue(point) })),
+        pointerY,
+        yForValue,
+        {
+          minY: chartDimensions.top,
+          maxY: chartDimensions.top + chartPlotHeight,
+        },
+      )
+      : null;
+    setHoveredSeriesId(target?.id ?? null);
+  };
+
+  const handlePointerUp = (event: ReactPointerEvent<SVGSVGElement>) => {
+    const gesture = touchGestureRef.current;
+    if (gesture?.pointerId !== event.pointerId) return;
+    suppressTouchClickRef.current = gesture.moved;
+    touchGestureRef.current = null;
+    onHoverPoint(null);
+    setHoveredSeriesId(null);
+  };
+
+  const handlePointerCancel = (event: ReactPointerEvent<SVGSVGElement>) => {
+    const gesture = touchGestureRef.current;
+    if (event.pointerType !== 'touch' && gesture?.pointerId !== event.pointerId) return;
+    suppressTouchClickRef.current = true;
+    touchGestureRef.current = null;
+    onHoverPoint(null);
+    setHoveredSeriesId(null);
+  };
 
   useEffect(() => {
     const element = chartContainerRef.current;
@@ -331,20 +453,34 @@ function SearchRewardChartSvg({
     return nearestIndex;
   };
 
-  const handlePointKeyDown = (event: KeyboardEvent<SVGCircleElement>, index: number) => {
+  const handleChartKeyDown = (event: KeyboardEvent<SVGSVGElement>) => {
     if (event.key === 'Escape') {
       event.preventDefault();
+      setHoveredSeriesId(null);
       onClearTemporarySelection();
       return;
     }
 
+    if (event.key === 'Enter') {
+      if (activePointIndex === null) return;
+      event.preventDefault();
+      setHoveredSeriesId(null);
+      onSelectPoint(activePointIndex);
+      return;
+    }
+
     if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    if (data.points.length === 0) return;
     event.preventDefault();
-    onHoverPoint(null);
+    setHoveredSeriesId(null);
     const direction = event.key === 'ArrowRight' ? 1 : -1;
-    const nextIndex = Math.max(0, Math.min(data.points.length - 1, index + direction));
+    const nextIndex = Math.max(0, Math.min(
+      data.points.length - 1,
+      (activePointIndex ?? tabEntryIndex) + direction,
+    ));
+    const nextPoint = data.points[nextIndex];
+    if (nextPoint) viewportControls.ensureLevelVisible(nextPoint.level);
     onFocusPoint(nextIndex);
-    pointRefs.current[nextIndex]?.focus();
   };
 
   return (
@@ -367,8 +503,9 @@ function SearchRewardChartSvg({
       />
       <svg
         role="group"
+        tabIndex={0}
         aria-labelledby="search-reward-chart-svg-title search-reward-chart-y-axis-label"
-        aria-describedby="search-reward-chart-interaction-hint"
+        aria-describedby="search-reward-chart-interaction-hint search-reward-chart-active-point-description"
         viewBox={`0 0 ${chartDimensions.width} ${chartDimensions.height}`}
         data-chart-width={chartDimensions.width}
         data-chart-x-min={visibleMinLevel}
@@ -377,9 +514,21 @@ function SearchRewardChartSvg({
         data-chart-y-max={valueRange}
         data-chart-tick-count={levelTicks.length}
         data-chart-y-tick-count={valueTicks.length}
-        className="block h-auto w-full"
+        className="block h-auto w-full rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
         style={{ touchAction: 'pan-y pinch-zoom' }}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerCancel}
+        onPointerLeave={() => {
+          onHoverPoint(null);
+          setHoveredSeriesId(null);
+        }}
         onClick={(event) => {
+          if (event.detail !== 0 && suppressTouchClickRef.current) {
+            suppressTouchClickRef.current = false;
+            return;
+          }
           if (event.detail === 0 || !isClientPointInChartPlot(
             event.clientX,
             event.clientY,
@@ -389,8 +538,22 @@ function SearchRewardChartSvg({
           const index = getNearestPointFromClientX(event.clientX, event.currentTarget);
           if (index !== null) onSelectPoint(index);
         }}
+        onFocus={() => {
+          const point = data.points[tabEntryIndex];
+          if (point) viewportControls.ensureLevelVisible(point.level);
+          setHoveredSeriesId(null);
+          onFocusPoint(tabEntryIndex);
+        }}
+        onBlur={() => {
+          setHoveredSeriesId(null);
+          onFocusPoint(null);
+        }}
+        onKeyDown={handleChartKeyDown}
       >
         <title id="search-reward-chart-svg-title">{labels.chartTitle}</title>
+        <desc id="search-reward-chart-active-point-description">
+          {activePoint ? getPointAccessibleLabel(activePoint, labels, formatNumber) : labels.chartTitle}
+        </desc>
         <defs>
           <clipPath id={chartClipPathId}>
             <rect
@@ -419,6 +582,7 @@ function SearchRewardChartSvg({
           return (
             <g key={`value-tick-${index}`}>
               <line
+                data-chart-y-gridline="true"
                 x1={chartDimensions.left}
                 x2={chartDimensions.width - chartDimensions.right}
                 y1={y}
@@ -442,6 +606,7 @@ function SearchRewardChartSvg({
         {series.map((item) => (
           <path
             key={item.id}
+            data-search-reward-chart-series={item.id}
             fill="none"
             stroke={item.color}
             strokeWidth={item.id === 'value' ? 3 : 2}
@@ -473,7 +638,7 @@ function SearchRewardChartSvg({
           ))
         )) : null}
 
-        {activePoint && selectedSeriesValue !== null ? (
+        {activePoint ? (
           <g
             data-selected-point="true"
             aria-hidden="true"
@@ -487,16 +652,6 @@ function SearchRewardChartSvg({
               stroke="var(--color-fd-primary)"
               strokeDasharray="5 4"
               strokeWidth="2"
-              vectorEffect="non-scaling-stroke"
-            />
-            <line
-              x1={chartDimensions.left}
-              x2={chartDimensions.width - chartDimensions.right}
-              y1={yForValue(selectedSeriesValue)}
-              y2={yForValue(selectedSeriesValue)}
-              stroke="var(--color-fd-primary)"
-              strokeDasharray="5 4"
-              strokeOpacity="0.5"
               vectorEffect="non-scaling-stroke"
             />
             {series.map((item) => (
@@ -513,6 +668,54 @@ function SearchRewardChartSvg({
             ))}
           </g>
         ) : null}
+
+        {hoveredSeries && hoveredSeriesCallout && hoveredSeriesCalloutLayout
+          && hoveredSeriesDisplayValue !== null ? (
+            <g
+              data-search-reward-chart-hover-callout="true"
+              data-search-reward-chart-hover-series={hoveredSeries.id}
+              data-search-reward-chart-hover-placement={hoveredSeriesCallout.placement}
+              aria-hidden="true"
+              pointerEvents="none"
+            >
+              <rect
+                x={hoveredSeriesCallout.x}
+                y={hoveredSeriesCallout.y}
+                width={hoveredSeriesCalloutLayout.width}
+                height={hoveredSeriesCalloutLayout.height}
+                rx="4"
+                fill="var(--color-fd-background)"
+                stroke={hoveredSeries.color}
+                strokeOpacity="0.9"
+                vectorEffect="non-scaling-stroke"
+              />
+              <text
+                x={hoveredSeriesCallout.x + 8}
+                y={hoveredSeriesCallout.y + 16}
+                fill={hoveredSeries.color}
+                fontSize="11"
+                fontWeight="600"
+              >
+                {hoveredSeriesCalloutLayout.labelLines.map((line, index) => (
+                  <tspan key={`label-${index}`} x={hoveredSeriesCallout.x + 8} dy={index === 0 ? 0 : 14}>
+                    {line}
+                  </tspan>
+                ))}
+              </text>
+              <text
+                x={hoveredSeriesCallout.x + 8}
+                y={hoveredSeriesCallout.y + 32 + (hoveredSeriesCalloutLayout.labelLines.length - 1) * 14}
+                fill="var(--color-fd-foreground)"
+                fontSize="10"
+              >
+                {hoveredSeriesCalloutLayout.valueLines.map((line, index) => (
+                  <tspan key={`value-${index}`} x={hoveredSeriesCallout.x + 8} dy={index === 0 ? 0 : 13}>
+                    {line}
+                  </tspan>
+                ))}
+              </text>
+            </g>
+          ) : null}
 
         {currentX !== null ? (
           <g aria-hidden="true" clipPath={`url(#${chartClipPathId})`}>
@@ -592,53 +795,8 @@ function SearchRewardChartSvg({
           height={chartPlotHeight}
           fill="transparent"
           aria-hidden="true"
-          onPointerMove={(event) => {
-            const index = getNearestPointFromClientX(
-              event.clientX,
-              event.currentTarget.ownerSVGElement,
-            );
-            if (index !== null) onHoverPoint(index);
-          }}
-          onPointerLeave={() => onHoverPoint(null)}
-          onClick={(event) => {
-            const index = getNearestPointFromClientX(
-              event.clientX,
-              event.currentTarget.ownerSVGElement,
-            );
-            if (index !== null) onSelectPoint(index);
-          }}
         />
 
-        {data.points.map((point, index) => (
-          <circle
-            key={`point-target-${point.level}`}
-            ref={(element) => {
-              pointRefs.current[index] = element;
-            }}
-            cx={xForLevel(point.level)}
-            cy={yForValue(series[0]?.getValue(point) ?? 0)}
-            r="12"
-            fill="transparent"
-            stroke="transparent"
-            strokeWidth="2"
-            tabIndex={index === tabEntryIndex ? 0 : -1}
-            role="button"
-            clipPath={`url(#${chartClipPathId})`}
-            aria-label={getPointAccessibleLabel(point, labels, formatNumber)}
-            aria-pressed={pinnedPointIndex === index}
-            onMouseEnter={() => onHoverPoint(index)}
-            onMouseLeave={() => onHoverPoint(null)}
-            onFocus={() => {
-              viewportControls.ensureLevelVisible(point.level);
-              onFocusPoint(index);
-            }}
-            onBlur={() => onFocusPoint(null)}
-            onClick={(event) => {
-              if (event.detail === 0) onSelectPoint(index);
-            }}
-            onKeyDown={(event) => handlePointKeyDown(event, index)}
-          />
-        ))}
       </svg>
     </div>
   );
@@ -708,9 +866,10 @@ export function SearchRewardChart({
 }) {
   const { inputs } = useSearchRewardTool();
   const [metric, setMetric] = useState<SearchRewardChartMetric>('value');
-  const [hoveredPointIndex, setHoveredPointIndex] = useState<number | null>(null);
-  const [focusedPointIndex, setFocusedPointIndex] = useState<number | null>(null);
-  const [pinnedPointIndex, setPinnedPointIndex] = useState<number | null>(null);
+  const [selection, dispatchSelection] = useReducer(
+    reduceChartSelection,
+    initialChartSelectionState,
+  );
   const formatNumber = useMemo(
     () => numberFormatter ?? createNumberFormatter(locale),
     [locale, numberFormatter],
@@ -724,10 +883,7 @@ export function SearchRewardChart({
   const defaultPointIndex = chartData
     ? getNearestPointIndex(chartData.points, inputs?.playerLevel ?? null)
     : null;
-  const activePointIndex = hoveredPointIndex
-    ?? focusedPointIndex
-    ?? pinnedPointIndex
-    ?? defaultPointIndex;
+  const activePointIndex = getChartSelectionIndex(selection, defaultPointIndex);
   const activePoint = activePointIndex === null || !chartData
     ? undefined
     : chartData.points[activePointIndex];
@@ -739,10 +895,10 @@ export function SearchRewardChart({
       aria-labelledby="search-reward-chart-heading"
     >
       <Card>
-        <CardHeader>
+        <CardHeader className="px-3 sm:px-6">
           <CardTitle id="search-reward-chart-heading" className="site-tool-section-heading">{labels.chartTitle}</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-3 pt-0 sm:px-6">
           {chartData ? (
             <>
               <fieldset className="min-w-0">
@@ -793,16 +949,17 @@ export function SearchRewardChart({
                     currentLevel={inputs?.playerLevel ?? null}
                     locale={locale}
                     activePointIndex={activePointIndex}
-                    pinnedPointIndex={pinnedPointIndex}
+                    pinnedPointIndex={selection.pinnedIndex}
                     labels={labels}
                     formatNumber={formatNumber}
-                    onHoverPoint={setHoveredPointIndex}
-                    onFocusPoint={setFocusedPointIndex}
-                    onSelectPoint={setPinnedPointIndex}
-                    onClearTemporarySelection={() => {
-                      setHoveredPointIndex(null);
-                      setFocusedPointIndex(null);
-                    }}
+                    onHoverPoint={(index) => dispatchSelection(index === null
+                      ? { type: 'pointer-leave' }
+                      : { type: 'pointer-move', index })}
+                    onFocusPoint={(index) => dispatchSelection(index === null
+                      ? { type: 'keyboard-blur' }
+                      : { type: 'keyboard-focus', index })}
+                    onSelectPoint={(index) => dispatchSelection({ type: 'pin', index })}
+                    onClearTemporarySelection={() => dispatchSelection({ type: 'reset' })}
                   />
                 </div>
                 <ChartLegend

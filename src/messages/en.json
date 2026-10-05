@@ -17,9 +17,13 @@
     },
     "contribution": {
       "title": "Contribute",
-      "boardLink": "View the full contribution board",
-      "guideLink": "Read the contribution guide",
-      "empty": "There are no pending items right now."
+      "boardLink": "Contributions",
+      "guideLink": "Contribution guide",
+      "empty": "There are no pending items right now.",
+      "counts": {
+        "incomplete": "Incomplete",
+        "translation": "Needs translation"
+      }
     },
     "secondary": {
       "eyebrow": "More resources",
@@ -674,7 +678,7 @@
       "contactLabel": "Contact",
       "contactText": "Message douobb in-game or via Discord DM.",
       "noteLabel": "Personal note",
-      "noteText": "This person is lazy and left nothing behind."
+      "noteText": "The owner was too lazy to leave a note."
     },
     "responsibilitiesLabel": "Responsibilities",
     "responsibilityLabels": {
@@ -717,10 +721,10 @@
     "description": "Recommended tools, data sources, community websites, and other content.",
     "openSite": "Open link",
     "noteLabel": "Note",
-      "coverPlaceholder": "No cover, document icon",
-      "empty": "There are no recommendations yet.",
-      "listLabel": "Website recommendations",
-      "recommendationItems": {
+    "coverPlaceholder": "No cover, document icon",
+    "empty": "There are no recommendations yet.",
+    "listLabel": "Website recommendations",
+    "recommendationItems": {
         "sl-data": {
           "name": "SL DATA",
           "description": "A Shangri-La data center containing confidential records.",
@@ -735,7 +739,8 @@
         "official-discord": {
           "name": "Official Discord",
           "description": "Includes public-channel chat logs and official announcements.",
-          "category": "Community website"
+          "category": "Community website",
+          "imageAlt": "Official Discord logo"
         }
       }
   },

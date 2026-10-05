@@ -6,7 +6,7 @@ import {
 } from '@/components/tool-player-settings-link';
 import type { Locale } from './i18n';
 import { toLocalePath } from './i18n';
-import { appName, getGitConfig } from './shared';
+import { appName, getGitConfig, projectRepositoryUrl } from './shared';
 import { getMessages } from './translations';
 
 export function getNavigationLinks(locale: Locale): NonNullable<BaseLayoutProps['links']> {
@@ -51,7 +51,7 @@ export function baseOptions(locale: Locale): BaseLayoutProps {
     },
     links: getNavigationLinks(locale),
     themeSwitch: { enabled: false },
-    githubUrl: gitConfig ? `https://github.com/${gitConfig.user}/${gitConfig.repo}` : undefined,
+    githubUrl: gitConfig ? `https://github.com/${gitConfig.user}/${gitConfig.repo}` : projectRepositoryUrl,
   };
 }
 

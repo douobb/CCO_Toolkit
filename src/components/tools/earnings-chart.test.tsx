@@ -78,11 +78,12 @@ describe('Earnings trend chart', () => {
   it('依容器寬度配置 desktop 與窄畫布，保留長負數刻度空間', () => {
     const compact = getEarningsChartDimensions(360);
     const mobile = getEarningsChartDimensions(320);
+    const wideMobile = getEarningsChartDimensions(400);
     const desktop = getEarningsChartDimensions(960);
 
     expect(compact).toMatchObject({
       width: 360,
-      height: 180,
+      height: 220,
       left: 44,
       right: 8,
       top: 28,
@@ -96,7 +97,8 @@ describe('Earnings trend chart', () => {
       top: 32,
       bottom: 62,
     });
-    expect(mobile).toMatchObject({ width: 320, height: 160 });
+    expect(mobile).toMatchObject({ width: 320, height: 210 });
+    expect(wideMobile).toMatchObject({ width: 400, height: 230 });
     expect(compact.width - compact.left - compact.right).toBeGreaterThan(300);
     expect(desktop.width - desktop.left - desktop.right).toBeGreaterThan(858);
     expect(compact.left - chartYAxisTickGap).toBeGreaterThanOrEqual(
@@ -109,8 +111,20 @@ describe('Earnings trend chart', () => {
 
   it('呈現 800 個等級、預設變動收益系列、兩個檢視與容器自適應畫布', () => {
     const markup = renderToStaticMarkup(chart('per-minute'));
+    const parsed = document.createElement('div');
+    parsed.innerHTML = markup;
+    const cardContent = parsed.querySelector(
+      '[data-earnings-chart] > div > div:last-child',
+    );
+    const cardHeader = parsed.querySelector(
+      '[data-earnings-chart] > div > div:first-child',
+    );
 
     expect(markup).toContain('data-earnings-chart="true"');
+    expect(cardHeader?.className).toContain('px-3');
+    expect(cardHeader?.className).toContain('sm:px-6');
+    expect(cardContent?.className).toContain('px-3');
+    expect(cardContent?.className).toContain('sm:px-6');
     expect(markup).toContain('data-earnings-chart-group="variable"');
     expect(markup).toContain('data-chart-point-count="800"');
     expect(markup).toContain('data-chart-series-count="16"');
@@ -141,8 +155,6 @@ describe('Earnings trend chart', () => {
     expect(markup).toContain('aria-pressed="true"');
     expect(markup).toContain('aria-pressed="false"');
     expect(markup).toContain('data-earnings-chart-legend-reference="yellow-box"');
-    const parsed = document.createElement('div');
-    parsed.innerHTML = markup;
     const chartRegion = parsed.querySelector('[data-chart-region]');
     const viewportSlider = parsed.querySelector('[data-chart-viewport-slider]');
     const viewportButtons = parsed.querySelector('[data-chart-viewport-action="zoom-in"]')
@@ -449,6 +461,8 @@ describe('Earnings trend chart', () => {
       interactionLayer.dispatchEvent(new PointerEvent('pointerout', { bubbles: true }));
     });
     expect(container.querySelector('[data-earnings-chart-hover-callout]')).toBeNull();
+    expect(container.querySelector('[data-earnings-chart-details]')?.textContent)
+      .toContain('Lv.1');
 
     await act(async () => {
       interactionLayer.dispatchEvent(new PointerEvent('pointermove', {
@@ -481,9 +495,147 @@ describe('Earnings trend chart', () => {
       }));
     });
     expect(container.querySelector('[data-earnings-chart-details]')?.textContent)
-      .toContain('Lv.800');
+      .toContain('Lv.120');
 
     await unmount(root);
+  });
+
+  it('切換 Tabs 無例外、清除 hover 與系列提示並保留 pin', async () => {
+    const { container, root } = await renderChart();
+    const errors: unknown[] = [];
+    const recordError = (event: ErrorEvent) => errors.push(event.error);
+    window.addEventListener('error', recordError);
+    try {
+      const svg = container.querySelector<SVGSVGElement>('svg[tabindex="0"]')!;
+      const layer = container.querySelector<SVGRectElement>(
+        '[data-earnings-chart-interaction-layer]',
+      )!;
+      Object.defineProperty(svg, 'getBoundingClientRect', {
+        value: () => ({ left: 0, top: 0, width: 960, height: 400 }),
+      });
+      await act(async () => {
+        svg.dispatchEvent(new MouseEvent('click', {
+          bubbles: true, detail: 1, clientX: 498, clientY: 160,
+        }));
+      });
+      const pinnedLevel = svg.getAttribute('data-active-level');
+      const dimensions = getEarningsChartDimensions(960);
+      const yMin = Number(svg.getAttribute('data-chart-y-min'));
+      const yMax = Number(svg.getAttribute('data-chart-y-max'));
+      const firstSearchValue = deriveEarningsChartData(inputs, prices, 'per-minute')
+        .points[0]?.values.search ?? 0;
+      const searchY = dimensions.top + (yMax - firstSearchValue) / (yMax - yMin)
+        * (dimensions.height - dimensions.top - dimensions.bottom);
+      await act(async () => {
+        layer.dispatchEvent(new PointerEvent('pointermove', {
+          bubbles: true, clientX: 48, clientY: searchY,
+        }));
+      });
+      expect(svg.getAttribute('data-active-level')).toBe('1');
+      expect(container.querySelector('[data-earnings-chart-hover-callout]')).not.toBeNull();
+      const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
+      const fixedTab = tabs.find((tab) => tab.textContent === labels.trendGroupFixed)!;
+      const variableTab = tabs.find((tab) => tab.textContent === labels.trendGroupVariable)!;
+      await expect(act(async () => fixedTab.click())).resolves.toBeUndefined();
+      expect(fixedTab.getAttribute('aria-selected')).toBe('true');
+      await expect(act(async () => variableTab.click())).resolves.toBeUndefined();
+      expect(errors).toEqual([]);
+      expect(container.querySelector('svg[tabindex="0"]')?.getAttribute('data-active-level'))
+        .toBe(pinnedLevel);
+      expect(container.querySelector('[data-earnings-chart-hover-callout]')).toBeNull();
+    } finally {
+      window.removeEventListener('error', recordError);
+      await unmount(root);
+    }
+  });
+
+  it('觸控放開清除系列提示但保留預覽，拖曳／取消不 pin，點按才鎖定', async () => {
+    const { container, root } = await renderChart();
+    const svg = container.querySelector<SVGSVGElement>('svg[tabindex="0"]')!;
+    const interactionLayer = container.querySelector<SVGRectElement>(
+      '[data-earnings-chart-interaction-layer]',
+    )!;
+    const dimensions = getEarningsChartDimensions(960);
+    const plotWidth = dimensions.width - dimensions.left - dimensions.right;
+    const xAt = (level: number) => dimensions.left
+      + (level - 1) / 799 * plotWidth;
+    const dispatchTouchPointer = (
+      target: SVGSVGElement | SVGRectElement,
+      type: 'pointerdown' | 'pointermove' | 'pointerup' | 'pointercancel',
+      level: number,
+      y: number,
+      pointerId = 27,
+    ) => target.dispatchEvent(new PointerEvent(type, {
+      bubbles: true,
+      pointerId,
+      pointerType: 'touch',
+      isPrimary: true,
+      clientX: xAt(level),
+      clientY: y,
+    }));
+    Object.defineProperty(svg, 'getBoundingClientRect', {
+      value: () => ({ left: 0, top: 0, width: 960, height: 400 }),
+    });
+
+    const data = deriveEarningsChartData(inputs, prices, 'per-minute');
+    const yDomain = {
+      min: Number(svg.getAttribute('data-chart-y-min')),
+      max: Number(svg.getAttribute('data-chart-y-max')),
+    };
+    const yAtSearch = (level: number) => {
+      const value = data.points[level - 1]?.values.search ?? 0;
+      return dimensions.top + (yDomain.max - value) / (yDomain.max - yDomain.min)
+        * (dimensions.height - dimensions.top - dimensions.bottom);
+    };
+    const hover = async (level: number) => {
+      await act(async () => {
+        interactionLayer.dispatchEvent(new PointerEvent('pointermove', {
+          bubbles: true,
+          clientX: xAt(level),
+          clientY: yAtSearch(level),
+        }));
+        interactionLayer.dispatchEvent(new PointerEvent('pointerout', { bubbles: true }));
+      });
+    };
+    const click = (level: number) => svg.dispatchEvent(new MouseEvent('click', {
+      bubbles: true,
+      detail: 1,
+      clientX: xAt(level),
+      clientY: yAtSearch(level),
+    }));
+
+    await hover(300);
+    expect(svg.getAttribute('data-active-level')).toBe('300');
+
+    await act(async () => {
+      dispatchTouchPointer(svg, 'pointerdown', 300, 150);
+      dispatchTouchPointer(interactionLayer, 'pointermove', 350, 175);
+      dispatchTouchPointer(svg, 'pointerup', 350, 175);
+      click(350);
+    });
+    expect(svg.getAttribute('data-active-level')).toBe('350');
+    expect(container.querySelector('[data-earnings-chart-hover-callout]')).toBeNull();
+    await hover(500);
+    expect(svg.getAttribute('data-active-level')).toBe('500');
+
+    await act(async () => {
+      dispatchTouchPointer(svg, 'pointerdown', 500, 150, 28);
+      dispatchTouchPointer(interactionLayer, 'pointermove', 600, 160, 28);
+      dispatchTouchPointer(svg, 'pointercancel', 600, 160, 28);
+      click(600);
+    });
+    await hover(700);
+    expect(svg.getAttribute('data-active-level')).toBe('700');
+
+    await act(async () => {
+      dispatchTouchPointer(svg, 'pointerdown', 250, 150, 29);
+      dispatchTouchPointer(svg, 'pointerup', 250, 150, 29);
+      click(250);
+    });
+    await hover(400);
+    expect(svg.getAttribute('data-active-level')).toBe('250');
+
+    await act(async () => root.unmount());
   });
 
   it('slider 可移至兩端並重設，圖內拖曳不平移且點選與鍵盤選取仍運作', async () => {

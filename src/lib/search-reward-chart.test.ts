@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import { defaultSearchRewards } from './search-reward';
 import { calculateAreaReward, type SearchRewardEntry } from './search-reward-calculator';
-import { deriveSearchRewardChartData } from './search-reward-chart';
+import {
+  deriveSearchRewardChartData,
+  findNearestSearchRewardChartSeries,
+  getSearchRewardChartCalloutLayout,
+  getSearchRewardChartCalloutPosition,
+} from './search-reward-chart';
 
 const chartPrices = { mt: 1_000, atp: 2_000, matp: 3_000 } as const;
 
@@ -70,5 +75,66 @@ describe('Search Reward chart data', () => {
       (oneSearch.points[1]?.totalExpectedValue ?? 0) + 3,
     );
     expect(rewards.map((entry) => entry.level)).toEqual([1, 10, 20, 30]);
+  });
+});
+
+describe('Search Reward chart hover helpers', () => {
+  it('只命中距離門檻內最近的曲線，同距離時保留 series 順序', () => {
+    const series = [
+      { id: 'medical', value: 10 },
+      { id: 'ammo', value: 14 },
+      { id: 'military', value: 50 },
+    ] as const;
+
+    expect(findNearestSearchRewardChartSeries(
+      series,
+      12,
+      (value) => value,
+      { minY: 0, maxY: 40 },
+    )).toEqual({ id: 'medical', value: 10, distance: 2 });
+    expect(findNearestSearchRewardChartSeries(
+      series,
+      30,
+      (value) => value,
+      { minY: 0, maxY: 60 },
+    )).toBeNull();
+    expect(findNearestSearchRewardChartSeries(
+      series,
+      61,
+      (value) => value,
+      { minY: 0, maxY: 60 },
+    )).toBeNull();
+  });
+
+  it('窄繪圖區換行長標籤與數值，維持固定字級所需高度', () => {
+    const layout = getSearchRewardChartCalloutLayout(
+      'Military ammunition tech parts (MATP)',
+      '123456789012345678901234567890 AI / batch',
+      170,
+    );
+
+    expect(layout.width).toBe(170);
+    expect(layout.labelLines.length).toBeGreaterThan(1);
+    expect(layout.valueLines.length).toBeGreaterThan(1);
+    expect(layout.height).toBeGreaterThan(42);
+  });
+
+  it('callout 靠右側空間不足時改靠左並限制於繪圖範圍', () => {
+    const position = getSearchRewardChartCalloutPosition({
+      pointX: 290,
+      pointY: 175,
+      calloutWidth: 100,
+      calloutHeight: 60,
+      minX: 40,
+      maxX: 300,
+      minY: 20,
+      maxY: 180,
+    });
+
+    expect(position.placement).toBe('left');
+    expect(position.x).toBeGreaterThanOrEqual(40);
+    expect(position.x + 100).toBeLessThanOrEqual(300);
+    expect(position.y).toBeGreaterThanOrEqual(20);
+    expect(position.y + 60).toBeLessThanOrEqual(180);
   });
 });

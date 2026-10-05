@@ -17,9 +17,13 @@
     },
     "contribution": {
       "title": "参与贡献",
-      "boardLink": "查看完整贡献看板",
-      "guideLink": "阅读贡献指南",
-      "empty": "当前没有待处理项目。"
+      "boardLink": "贡献看板",
+      "guideLink": "投稿指南",
+      "empty": "当前没有待处理项目。",
+      "counts": {
+        "incomplete": "待补全",
+        "translation": "待翻译"
+      }
     },
     "secondary": {
       "eyebrow": "更多资源",
@@ -717,10 +721,10 @@
     "description": "推荐值得收藏的工具、数据、社群网站与其他内容。",
     "openSite": "打开链接",
     "noteLabel": "备注",
-      "coverPlaceholder": "无封面，使用文件图示",
-      "empty": "当前还没有推荐内容。",
-      "listLabel": "网站推荐内容",
-      "recommendationItems": {
+    "coverPlaceholder": "无封面，使用文件图示",
+    "empty": "当前还没有推荐内容。",
+    "listLabel": "网站推荐内容",
+    "recommendationItems": {
         "sl-data": {
           "name": "SL DATA",
           "description": "香格里拉数据中心，记录着机密资料。",
@@ -734,8 +738,9 @@
         },
         "official-discord": {
           "name": "官方 Discord",
-          "description": "内含公共频道聊天记录与官方消息。",
-          "category": "社群网站"
+          "description": "包含公共频道聊天记录和官方公告。",
+          "category": "社群网站",
+          "imageAlt": "Discord 官方标志"
         }
       }
   },

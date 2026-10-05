@@ -1,0 +1,26 @@
+.summaryCards {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 1rem;
+}
+
+.contributionCard {
+  container-name: contribution-card;
+  container-type: inline-size;
+}
+
+.summaryActions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+@container contribution-card (min-width: 40rem) {
+  .summaryActions {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}

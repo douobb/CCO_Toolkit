@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { resolveLinkItems } from 'fumadocs-ui/layouts/shared';
 import blogMeta from '../../content/blog/meta.json';
 import blogZhCnMeta from '../../content/blog/meta.zh-cn.json';
 import aboutMeta from '../../content/about/meta.json';
@@ -23,6 +24,21 @@ const privacyPageSource = readFileSync(
 );
 
 describe('Fumadocs navigation', () => {
+  it('provides an external GitHub repository icon as the last navigation link in every locale', () => {
+    for (const locale of ['zh-tw', 'zh-cn', 'en'] as const) {
+      for (const options of [baseOptions(locale), docsOptions(locale)]) {
+        expect(options.githubUrl).toBe('https://github.com/douobb/CCO_Toolkit');
+        expect(resolveLinkItems(options).at(-1)).toMatchObject({
+          type: 'icon',
+          label: 'GitHub',
+          url: 'https://github.com/douobb/CCO_Toolkit',
+          external: true,
+          icon: expect.objectContaining({ type: 'svg' }),
+        });
+      }
+    }
+  });
+
   it('builds locale-aware navigation links', () => {
     expect(getNavigationLinks('zh-tw')).toMatchObject([
       { text: '工具', url: '/zh-tw/tools' },

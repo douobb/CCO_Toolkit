@@ -1,10 +1,14 @@
 import { getIntlLocale, isLocale, type Locale } from './i18n';
 import { contentSections } from './content-sections';
 
-export interface ChangelogEntry {
-  date: string;
+export interface ChangelogContent {
   title: string;
   description: string;
+}
+
+export interface ChangelogEntry extends ChangelogContent {
+  date: string;
+  localized?: Partial<Record<Exclude<Locale, 'zh-tw'>, ChangelogContent>>;
 }
 
 export interface ChangelogGroup {
@@ -21,11 +25,32 @@ export const changelogEntries: readonly ChangelogEntry[] = [
     date: '2026-10-04',
     title: '網站正式部屬',
     description: 'CCO Toolkit 正式部署至 GitHub Pages。',
+    localized: {
+      en: {
+        title: 'CCO Toolkit launched',
+        description: 'CCO Toolkit is now live on GitHub Pages.',
+      },
+      'zh-cn': {
+        title: '网站正式上线',
+        description: 'CCO Toolkit 已正式部署至 GitHub Pages。',
+      },
+    },
   },
   {
     date: '2026-08-26',
     title: '網站開始建立',
     description: '建立 CCO Toolkit 的初始 Foundation，固定網站的內容、語系與部署架構。',
+    localized: {
+      en: {
+        title: 'CCO Toolkit development began',
+        description:
+          'Built the initial foundation for CCO Toolkit and established its content, localization, and deployment architecture.',
+      },
+      'zh-cn': {
+        title: '网站开始建设',
+        description: '搭建 CCO Toolkit 的初始架构，确定网站的内容、语言与部署方式。',
+      },
+    },
   },
 ];
 
@@ -33,8 +58,13 @@ function getDate(date: string) {
   return new Date(`${date}T00:00:00Z`);
 }
 
-export function getChangelogEntries(): ChangelogEntry[] {
-  return [...changelogEntries].sort((a, b) => b.date.localeCompare(a.date));
+export function getChangelogEntries(locale: Locale = 'zh-tw'): ChangelogEntry[] {
+  return [...changelogEntries]
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .map(({ localized, ...entry }) => ({
+      ...entry,
+      ...(locale === 'zh-tw' ? undefined : localized?.[locale]),
+    }));
 }
 
 export function formatChangelogDate(date: string, locale: Locale): string {
@@ -51,7 +81,7 @@ export function formatChangelogDate(date: string, locale: Locale): string {
 export function getChangelogGroups(locale: Locale): ChangelogGroup[] {
   const groups = new Map<string, ChangelogGroup>();
 
-  for (const entry of getChangelogEntries()) {
+  for (const entry of getChangelogEntries(locale)) {
     const key = entry.date.slice(0, 7);
     let group = groups.get(key);
 

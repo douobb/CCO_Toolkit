@@ -52,6 +52,7 @@ describe('contribution board UI', () => {
     expect(markup).toContain('href="/zh-tw/tools/example"');
     expect(markup).toContain('目標語系');
     expect(markup).toContain('簡體中文');
+    expect(markup).toContain('查看來源內容');
   });
 
   it('shows a clear empty state for both groups', () => {

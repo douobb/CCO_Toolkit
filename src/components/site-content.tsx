@@ -27,7 +27,7 @@ import { getMessages } from '@/lib/translations';
 
 export function Changelog({ locale, limit }: { locale: Locale; limit?: number }) {
   const messages = getMessages(locale).aboutPage;
-  const entries = getChangelogEntries();
+  const entries = getChangelogEntries(locale);
   const visibleEntries =
     limit === undefined ? entries : entries.slice(0, Math.max(0, Math.floor(limit)));
 
@@ -567,6 +567,9 @@ function RecommendationCards({
             const description = localized?.description ?? site.description;
             const category = localized?.category ?? site.category;
             const note = localized && 'note' in localized ? localized.note : site.note;
+            const imageAlt = localized && 'imageAlt' in localized
+              ? localized.imageAlt
+              : locale === 'zh-tw' ? site.imageAlt ?? name : name;
 
             return (
               <li key={site.id} className="h-full min-w-0">
@@ -580,7 +583,7 @@ function RecommendationCards({
                     {site.imageUrl ? (
                       <Image
                         src={withBasePath(site.imageUrl)}
-                        alt={site.imageAlt ?? name}
+                        alt={imageAlt}
                         width={1200}
                         height={675}
                         unoptimized

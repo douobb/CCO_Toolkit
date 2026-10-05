@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { parse, type AtRule } from 'postcss';
+import { parse, type AtRule, type Rule } from 'postcss';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -8,6 +8,7 @@ import { siteHomeTitleClassName } from '@/components/site-page-title';
 import { getMessages } from '@/lib/translations';
 
 const siteEffectsStylesPath = new URL('../../../app/site-effects.css', import.meta.url);
+const homePageContentStylesPath = new URL('../../../components/home-page-content.module.css', import.meta.url);
 
 vi.mock('@/lib/contribution-board-source', () => ({
   getContributionBoard: () => [
@@ -39,6 +40,94 @@ vi.mock('@/lib/contribution-board-source', () => ({
       href: '/zh-tw/guides/english-target',
       sourceLocale: 'zh-tw',
       targetLocale: 'en',
+    },
+    {
+      id: 'incomplete:tools/tool-incomplete',
+      kind: 'incomplete',
+      path: 'tools/tool-incomplete',
+      section: 'tools',
+      title: 'Incomplete tool contribution',
+      href: '/zh-tw/tools/tool-incomplete',
+      sourceLocale: 'zh-tw',
+    },
+    {
+      id: 'incomplete:blog/article-incomplete',
+      kind: 'incomplete',
+      path: 'blog/article-incomplete',
+      section: 'blog',
+      title: 'Incomplete article contribution',
+      href: '/zh-tw/blog/article-incomplete',
+      sourceLocale: 'zh-tw',
+    },
+    {
+      id: 'translation:guides/simplified-target:zh-cn',
+      kind: 'translation',
+      path: 'guides/simplified-target',
+      section: 'guides',
+      title: 'Simplified Chinese target contribution',
+      href: '/zh-tw/guides/simplified-target',
+      sourceLocale: 'zh-tw',
+      targetLocale: 'zh-cn',
+    },
+    {
+      id: 'translation:tools/tool-target:zh-tw',
+      kind: 'translation',
+      path: 'tools/tool-target',
+      section: 'tools',
+      title: 'Tool translation target',
+      href: '/zh-tw/tools/tool-target',
+      sourceLocale: 'zh-tw',
+      targetLocale: 'zh-tw',
+    },
+    {
+      id: 'translation:tools/tool-target:en',
+      kind: 'translation',
+      path: 'tools/tool-target',
+      section: 'tools',
+      title: 'Tool translation target',
+      href: '/zh-tw/tools/tool-target',
+      sourceLocale: 'zh-tw',
+      targetLocale: 'en',
+    },
+    {
+      id: 'translation:tools/tool-target:zh-cn',
+      kind: 'translation',
+      path: 'tools/tool-target',
+      section: 'tools',
+      title: 'Tool translation target',
+      href: '/zh-tw/tools/tool-target',
+      sourceLocale: 'zh-tw',
+      targetLocale: 'zh-cn',
+    },
+    {
+      id: 'translation:blog/article-target:zh-tw',
+      kind: 'translation',
+      path: 'blog/article-target',
+      section: 'blog',
+      title: 'Article translation target',
+      href: '/zh-tw/blog/article-target',
+      sourceLocale: 'zh-tw',
+      targetLocale: 'zh-tw',
+    },
+    {
+      id: 'translation:blog/article-target:en',
+      kind: 'translation',
+      path: 'blog/article-target',
+      section: 'blog',
+      title: 'Article translation target',
+      href: '/zh-tw/blog/article-target',
+      sourceLocale: 'zh-tw',
+      targetLocale: 'en',
+    },
+    {
+      id: 'translation:blog/article-target:zh-cn',
+      kind: 'translation',
+      path: 'blog/article-target',
+      section: 'blog',
+      title: 'Article translation target',
+      href: '/zh-tw/blog/article-target',
+      sourceLocale: 'zh-tw',
+      targetLocale: 'zh-cn',
     },
   ],
 }));
@@ -84,15 +173,29 @@ describe('home page information architecture', () => {
     expect(markup).toContain('href="/zh-tw/settings"');
     expect(markup).toContain('href="/zh-tw/about/contribution-board"');
     expect(markup).toContain('href="/zh-tw/about/contributing"');
-    const contributionLink = markup.match(
-      /<a(?=[^>]*href="\/zh-tw\/about\/contribution-board")[^>]*>[\s\S]*?<\/a>/,
-    )?.[0];
-    expect(contributionLink).toMatch(/<svg[^>]*size-4/);
+    const contributionActions = [
+      ['/zh-tw/about/contribution-board', 'bg-fd-primary'],
+      ['/zh-tw/about/contributing', 'bg-fd-card'],
+    ] as const;
+    for (const [href, variantClass] of contributionActions) {
+      const contributionAction = markup.match(
+        new RegExp(`<a(?=[^>]*href="${href}")[^>]*>[\\s\\S]*?<\\/a>`),
+      )?.[0];
+
+      expect(contributionAction).toBeDefined();
+      expect(contributionAction).not.toMatch(/<svg/);
+      expect(contributionAction).toContain('min-h-11');
+      expect(contributionAction).toContain('px-3');
+      expect(contributionAction).toContain('py-2');
+      expect(contributionAction).toContain('text-base');
+      expect(contributionAction).toContain('focus-visible:ring-2');
+      expect(contributionAction).toContain(variantClass);
+    }
     expect(markup).toContain('href="/zh-tw/blog"');
     expect(markup).toContain('href="/zh-tw/recommendations"');
     expect(markup).toContain('href="/zh-tw/about"');
-    expect(markup).toContain('Chinese target contribution');
-    expect(markup).not.toContain('English target contribution');
+    expect(markup).not.toContain('data-contribution-highlights');
+    expect(markup).toContain('href="/zh-tw/about/contribution-board"');
   });
 
   it.each(['zh-tw', 'zh-cn', 'en'] as const)(
@@ -109,17 +212,147 @@ describe('home page information architecture', () => {
     },
   );
 
-  it('slightly tightens homepage section spacing while preserving card padding', async () => {
+  it.each(['zh-tw', 'zh-cn', 'en'] as const)(
+    'counts incomplete content and only current-locale translations in %s',
+    async (locale) => {
+      const element = await HomePage({ params: Promise.resolve({ lang: locale }) });
+      const markup = renderToStaticMarkup(element);
+      const contribution = getMessages(locale).home.contribution;
+      const counts = markup.match(/<dl data-contribution-counts[^>]*>[\s\S]*?<\/dl>/)?.[0];
+      const countFor = (kind: 'incomplete' | 'translation') => counts?.match(
+        new RegExp(`<div data-contribution-count="${kind}"[\\s\\S]*?<dd[^>]*>(\\d+)<\\/dd>`),
+      )?.[1];
+
+      expect(markup).toContain(contribution.boardLink);
+      expect(markup).toContain(contribution.guideLink);
+      expect(counts).toContain(contribution.counts.incomplete);
+      expect(counts).toContain(contribution.counts.translation);
+      expect(countFor('incomplete')).toBe('3');
+      expect(countFor('translation')).toBe('3');
+    },
+  );
+
+  it('keeps the settings and contribution cards compact and visually consistent', async () => {
     const element = await HomePage({ params: Promise.resolve({ lang: 'zh-tw' }) });
     const markup = renderToStaticMarkup(element);
 
-    expect(markup).toContain('class="mt-8 grid gap-4 sm:mt-10 md:grid-cols-2"');
-    expect(markup).toContain('group mt-6 block rounded-xl border border-fd-border bg-fd-card/70 p-4');
-    expect(markup).toContain(
-      'class="mt-12 rounded-2xl border border-fd-border bg-fd-card/60 p-6 sm:mt-16 sm:p-8"',
+    expect(markup).toContain('class="mt-8 grid gap-3 sm:mt-10 md:grid-cols-2"');
+    const toolsCard = markup.match(/<a(?=[^>]*href="\/zh-tw\/tools")[^>]*>/)?.[0];
+    const guideCard = markup.match(/<a(?=[^>]*href="\/zh-tw\/guides")[^>]*>/)?.[0];
+    const settingsCard = markup.match(
+      /<a(?=[^>]*href="\/zh-tw\/settings")[^>]*>[\s\S]*?<\/a>/,
+    )?.[0];
+    const contributionCard = markup.match(/<section(?=[^>]*data-contribution-card="true")[^>]*>/)?.[0];
+    for (const primaryCard of [toolsCard, guideCard, contributionCard]) {
+      expect(primaryCard).toContain('p-6');
+      expect(primaryCard).toContain('sm:p-8');
+      expect(primaryCard?.match(/class="([^"]+)"/)?.[1].split(' ')).not.toContain('p-5');
+    }
+    const sharedCardStyles = ['rounded-2xl', 'border', 'border-fd-border', 'bg-fd-card'];
+    for (const summaryCard of [settingsCard, contributionCard]) {
+      const classes = summaryCard?.match(/class="([^"]+)"/)?.[1].split(' ') ?? [];
+
+      expect(classes.filter((className) => sharedCardStyles.includes(className))).toEqual(sharedCardStyles);
+    }
+    expect(settingsCard).toContain('size-5');
+    expect(settingsCard).toContain('aria-hidden="true"');
+    expect(settingsCard).not.toContain('site-home-section-heading');
+    expect(markup).toMatch(/<div(?=[^>]*data-home-summary-cards="true")[^>]*>[\s\S]*?href="\/zh-tw\/settings"[\s\S]*?<section(?=[^>]*data-contribution-card="true")/);
+
+    const contributionMarkup = markup.match(
+      /<section(?=[^>]*data-contribution-card="true")[^>]*>[\s\S]*?<\/section>/,
+    )?.[0];
+    const headingClasses = [settingsCard, contributionMarkup].map((card) =>
+      card?.match(/<h2[^>]*class="([^"]+)"/)?.[1]
+        ?.split(' ')
+        .filter((className) => !['group-hover:underline', 'site-home-section-heading'].includes(className)),
     );
-    expect(markup).toContain('<section aria-labelledby="home-secondary-heading" class="mt-12 sm:mt-16">');
+    expect(headingClasses[0]).toEqual(expect.arrayContaining([
+      'text-base',
+      'font-semibold',
+      'text-fd-foreground',
+    ]));
+    expect(headingClasses[0]).not.toContain('text-2xl');
+    expect(settingsCard).toContain('mt-1 text-sm leading-6');
+    expect(headingClasses[1]).toEqual(expect.arrayContaining([
+      'text-2xl',
+      'font-semibold',
+      'tracking-tight',
+      'text-fd-foreground',
+    ]));
+
+    for (const href of ['/zh-tw/blog', '/zh-tw/recommendations', '/zh-tw/about']) {
+      const secondaryCard = markup.match(new RegExp(`<a(?=[^>]*href="${href}")[^>]*>`))?.[0];
+
+      expect(secondaryCard).toContain('p-5');
+      expect(secondaryCard).not.toContain('sm:p-8');
+    }
+    expect(markup).toContain('<section aria-labelledby="home-secondary-heading" class="mt-8 sm:mt-12">');
+    expect(markup).toContain('class="mt-6 grid gap-3 sm:grid-cols-3"');
     expect(markup).toContain('site-home-section-heading text-2xl font-semibold');
+  });
+
+  it('keeps the cards stacked and uses contribution width for compact stats and actions', async () => {
+    const element = await HomePage({ params: Promise.resolve({ lang: 'en' }) });
+    const markup = renderToStaticMarkup(element);
+    const counts = markup.match(/<dl data-contribution-counts[^>]*>[\s\S]*?<\/dl>/)?.[0];
+    const statPairs = Array.from(
+      counts?.matchAll(/<div data-contribution-count="(?:incomplete|translation)"[^>]*>[\s\S]*?<\/div>/g) ?? [],
+      ([pair]) => pair,
+    );
+
+    expect(statPairs).toHaveLength(2);
+    expect(counts).toContain('flex flex-wrap items-baseline');
+    expect(markup).toContain('class="flex flex-wrap gap-2"');
+    for (const pair of statPairs) {
+      expect(pair).toContain('whitespace-nowrap');
+      expect(pair).toMatch(/<dt[^>]*>[\s\S]*?<\/dt><dd[^>]*>\d+<\/dd>/);
+      expect(pair).not.toMatch(/rounded-|border-fd-border|bg-fd-card|justify-between/);
+    }
+
+    const stylesheet = parse(await readFile(homePageContentStylesPath, 'utf8'));
+    const baseCardsRule = (stylesheet.nodes ?? []).find(
+      (node): node is Rule => node.type === 'rule' && node.selector === '.summaryCards',
+    );
+    const baseSummaryRule = (stylesheet.nodes ?? []).find(
+      (node): node is Rule => node.type === 'rule' && node.selector === '.summaryActions',
+    );
+    const cardContainerRule = (stylesheet.nodes ?? []).find(
+      (node): node is Rule => node.type === 'rule' && node.selector === '.contributionCard',
+    );
+    const declarations = (rule: Rule | undefined) => {
+      const result: Record<string, string> = {};
+      rule?.walkDecls((declaration) => { result[declaration.prop] = declaration.value; });
+      return result;
+    };
+    const wideContainer = (stylesheet.nodes ?? []).find(
+      (node): node is AtRule => node.type === 'atrule'
+        && node.name === 'container'
+        && node.params.startsWith('contribution-card (min-width:'),
+    );
+    const wideSummaryRule = wideContainer?.nodes?.find(
+      (node): node is Rule => node.type === 'rule' && node.selector === '.summaryActions',
+    );
+
+    expect(declarations(baseCardsRule)).toMatchObject({
+      display: 'grid',
+      'grid-template-columns': 'minmax(0, 1fr)',
+      'align-items': 'start',
+    });
+    const summaryCardRules: Rule[] = [];
+    stylesheet.walkRules('.summaryCards', (rule) => { summaryCardRules.push(rule); });
+    expect(summaryCardRules).toHaveLength(1);
+    expect(declarations(cardContainerRule)).toMatchObject({
+      'container-name': 'contribution-card',
+      'container-type': 'inline-size',
+    });
+    expect(declarations(baseSummaryRule)).toMatchObject({ display: 'flex', 'flex-direction': 'column' });
+    expect(wideContainer).toBeDefined();
+    expect(declarations(wideSummaryRule)).toMatchObject({
+      'flex-direction': 'row',
+      'align-items': 'center',
+      'justify-content': 'space-between',
+    });
   });
 });
 

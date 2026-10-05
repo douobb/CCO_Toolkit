@@ -180,11 +180,21 @@ const requiredFiles = [
   'zh-tw/about/index.html',
   'zh-cn/about/index.html',
   'en/about/index.html',
+  'zh-tw/about/licensing/index.html',
+  'zh-cn/about/licensing/index.html',
+  'en/about/licensing/index.html',
+  'zh-tw/about/changelog/index.html',
+  'zh-cn/about/changelog/index.html',
+  'en/about/changelog/index.html',
+  'zh-tw/about/contribution-board/index.html',
+  'en/about/contribution-board/index.html',
+  'zh-cn/about/contribution-board/index.html',
   'zh-tw/about/privacy/index.html',
   'zh-cn/about/privacy/index.html',
   'en/about/privacy/index.html',
   'zh-tw/about/contributing/index.html',
-  'zh-cn/about/contribution-board/index.html',
+  'zh-cn/about/contributing/index.html',
+  'en/about/contributing/index.html',
   'zh-tw/recommendations/index.html',
   'zh-cn/recommendations/index.html',
   'en/recommendations/index.html',
@@ -269,13 +279,22 @@ const representativePages = [
   ['zh-tw/about/index.html', '網站開始建立'],
   ['zh-tw/about/privacy/index.html', '隱私說明'],
   ['zh-tw/about/contributing/index.html', '投稿格式'],
-  ['zh-cn/about/index.html', '此页面暂未提供简体中文版本'],
+  ['zh-tw/about/licensing/index.html', '授權與聲明'],
+  ['zh-tw/about/changelog/index.html', '更新紀錄'],
+  ['zh-cn/about/index.html', 'CCO Toolkit'],
   ['zh-cn/about/privacy/index.html', '隐私说明'],
-  ['zh-cn/recommendations/index.html', '此页面暂未提供简体中文版本'],
+  ['zh-cn/about/licensing/index.html', '授权与声明'],
+  ['zh-cn/about/changelog/index.html', '更新记录'],
+  ['zh-cn/about/contributing/index.html', '贡献指南'],
+  ['zh-cn/recommendations/index.html', 'SL DATA'],
   ['zh-tw/recommendations/index.html', 'SL DATA'],
-  ['en/about/index.html', 'This page is not available in English yet'],
+  ['en/about/index.html', 'CCO Toolkit'],
   ['en/about/privacy/index.html', 'Privacy Notice'],
-  ['en/recommendations/index.html', 'This page is not available in English yet'],
+  ['en/about/licensing/index.html', 'Licensing and Notices'],
+  ['en/about/changelog/index.html', 'Changelog'],
+  ['en/about/contribution-board/index.html', 'Contribution board'],
+  ['en/about/contributing/index.html', 'Contribution Guide'],
+  ['en/recommendations/index.html', 'SL DATA'],
 ];
 
 for (const [relativePath, expected] of representativePages) {
@@ -511,7 +530,36 @@ for (const locale of ['zh-tw', 'zh-cn', 'en']) {
   assertExcludes(page, '/blog/website', 'Blog 已移除文章連結');
   assertExcludes(page, 'CCO Toolkit 網站說明', 'Blog 已移除文章標題');
 }
-assertIncludes(englishAboutPage, publicPath('/zh-tw/about/'), '英文 About fallback 導覽連結');
+// 已翻譯的全站頁面必須保有各語系內容及 metadata，不得退回未翻譯提示。
+for (const section of [
+  'about',
+  'about/privacy',
+  'about/licensing',
+  'about/changelog',
+  'about/contribution-board',
+  'about/contributing',
+  'recommendations',
+]) {
+  for (const locale of ['zh-tw', 'zh-cn', 'en']) {
+    const translatedPage = await readOutput(`${locale}/${section}/index.html`);
+    assertExcludes(translatedPage, 'This page is not available in English yet', `${locale}/${section} 正文`);
+    assertExcludes(translatedPage, '此页面暂未提供简体中文版本', `${locale}/${section} 正文`);
+    const canonicalLink = (translatedPage.match(/<link\b[^>]*>/g) ?? [])
+      .find((link) => /\brel="canonical"/.test(link));
+    const canonicalUrl = canonicalLink?.match(/\bhref="([^"]+)"/)?.[1];
+    if (!canonicalUrl || new URL(canonicalUrl, 'http://static.local').pathname.replace(/\/$/, '') !== publicPath(`/${locale}/${section}`)) {
+      throw new Error(`${locale}/${section} canonical 必須指向目前語系頁面`);
+    }
+    for (const tag of translatedPage.match(/<meta\b[^>]*>/g) ?? []) {
+      if (/\bname="robots"/.test(tag) && /\bnoindex\b/.test(tag)) {
+        throw new Error(`${locale}/${section} 已翻譯頁面不得使用 fallback 的 noindex`);
+      }
+    }
+    for (const [alternateLocale, htmlLanguage] of [['zh-tw', 'zh-TW'], ['zh-cn', 'zh-CN'], ['en', 'en']]) {
+      assertAlternate(translatedPage, htmlLanguage, publicPath(`/${alternateLocale}/${section}`), `${locale}/${section} alternate`);
+    }
+  }
+}
 assertExcludes(
   aboutPage,
   'content-authoring',
@@ -618,16 +666,8 @@ for (const { locale, page, expected } of privacySubmissionAssertions) {
     assertIncludes(page, phrase, locale + '隱私說明投稿告知');
   }
 }
-assertIncludes(
-  englishRecommendationsPage,
-  publicPath('/zh-tw/recommendations/'),
-  '英文推薦 fallback 導覽連結',
-);
-assertIncludes(
-  await readOutput('zh-cn/recommendations/index.html'),
-  publicPath('/zh-tw/recommendations/'),
-  '簡中推薦 fallback 導覽連結',
-);
+assertIncludes(englishRecommendationsPage, 'Official Discord', '英文推薦卡片名稱');
+assertIncludes(await readOutput('zh-cn/recommendations/index.html'), '官方 Discord', '簡中推薦卡片名稱');
 assertIncludes(recommendationsPage, '值得收藏的工具、資料與社群網站。', '推薦頁 description');
 assertIncludes(recommendationsPage, '網站推薦', '推薦頁網站推薦標題');
 assertExcludes(
@@ -766,6 +806,12 @@ if (
 
 for (const path of verticalSlicePages) {
   assertIncludes(searchIndex, `/zh-tw/${path}`, '搜尋索引內容路徑');
+}
+
+for (const locale of ['zh-cn', 'en']) {
+  for (const section of ['about', 'about/privacy', 'about/licensing', 'about/changelog', 'about/contribution-board', 'about/contributing', 'recommendations']) {
+    assertIncludes(searchIndex, `/${locale}/${section}`, `${locale} 全站翻譯搜尋索引`);
+  }
 }
 
 for (const path of [

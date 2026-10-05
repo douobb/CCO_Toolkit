@@ -13,6 +13,12 @@ const headerCellSelector =
   "table:not([data-sticky-first-column='false']) thead tr > :is(th, td):first-child:not([colspan]:not([colspan='1']))";
 const headerGroupSelector = "table:not([data-sticky-first-column='false']) > thead";
 const tableSelector = "table:not([data-sticky-first-column='false'])";
+const gameDataVersionTableSelector = '[data-game-data-version-table] > table';
+const gameDataVersionCellSelector =
+  "[data-game-data-version-table] > table:not([data-sticky-first-column='false']) tr > :is(th, td)";
+const gameDataVersionFirstCellSelector =
+  `${gameDataVersionCellSelector}:first-child:not([colspan]:not([colspan='1']))`;
+const gameDataVersionSourceCellSelector = `${gameDataVersionCellSelector}:nth-child(6)`;
 
 function normalizeSelector(selector: string) {
   return selector.replace(/\s+/g, ' ').replace(/\s*>\s*/g, ' > ').trim();
@@ -39,6 +45,58 @@ describe('global sticky table styles', () => {
     expect(getDeclarations('table[data-markdown-table] tr > :is(th, td)').get('white-space')).toBe('normal');
     expect(getDeclarations('table[data-markdown-table]:has(tr > :nth-child(6)) tr > :is(th, td):last-child').get('min-width')).toBe('20rem');
   });
+
+  it('scopes version-table widths and natural wrapping to the six-column Game Data table', () => {
+    const tableDeclarations = getDeclarations(gameDataVersionTableSelector);
+    const cellDeclarations = getDeclarations(gameDataVersionCellSelector);
+    const firstCellDeclarations = getDeclarations(gameDataVersionFirstCellSelector);
+    const sourceCellDeclarations = getDeclarations(gameDataVersionSourceCellSelector);
+
+    expect(tableDeclarations.get('width')).toBe('100%');
+    expect(tableDeclarations.get('min-width')).toBe('59.75rem');
+    expect(tableDeclarations.get('table-layout')).toBe('fixed');
+    expect(cellDeclarations.get('white-space')).toBe('nowrap');
+    expect(cellDeclarations.get('overflow-wrap')).toBe('normal');
+    expect(cellDeclarations.get('word-break')).toBe('normal');
+    expect(firstCellDeclarations.get('width')).toBe('9.375rem');
+    expect(firstCellDeclarations.get('min-width')).toBe('9.375rem');
+    expect(firstCellDeclarations.get('max-width')).toBe('9.375rem');
+    expect(firstCellDeclarations.get('white-space')).toBe('normal');
+    expect(firstCellDeclarations.get('overflow-wrap')).toBe('normal');
+    expect(sourceCellDeclarations.get('white-space')).toBe('normal');
+    expect(gameDataVersionFirstCellSelector).toContain('[data-game-data-version-table]');
+    expect(gameDataVersionFirstCellSelector).toContain(
+      ":not([data-sticky-first-column='false'])",
+    );
+  });
+
+  it('keeps the 150px dataset column intact under the shared mobile anywhere rule', () => {
+    let mobileDeclarations = new Map<string, string>();
+
+    stylesheet.walkAtRules('media', (rule) => {
+      if (rule.params === '(max-width: 640px)') {
+        rule.walkRules((nestedRule) => {
+          if (
+            normalizeSelector(nestedRule.selector) ===
+            normalizeSelector(gameDataVersionFirstCellSelector)
+          ) {
+            nestedRule.walkDecls((declaration) => {
+              mobileDeclarations.set(declaration.prop, declaration.value);
+            });
+          }
+        });
+      }
+    });
+
+    expect(mobileDeclarations.get('width')).toBe('9.375rem');
+    expect(mobileDeclarations.get('min-width')).toBe('9.375rem');
+    expect(mobileDeclarations.get('max-width')).toBe('9.375rem');
+    expect(mobileDeclarations.get('white-space')).toBe('normal');
+    expect(mobileDeclarations.get('overflow-wrap')).toBe('normal');
+    expect(mobileDeclarations.get('word-break')).toBe('normal');
+    expect(getDeclarations(firstCellSelector).get('overflow-wrap')).toBe('anywhere');
+  });
+
   it('loads from the application-wide stylesheet', () => {
     expect(globalStyles).toContain("@import './table-sticky.css';");
   });

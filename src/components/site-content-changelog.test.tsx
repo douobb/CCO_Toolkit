@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { getChangelogEntries, type ChangelogEntry } from '@/lib/site-content';
+import type { Locale } from '@/lib/i18n';
 import { getMessages } from '@/lib/translations';
 
 import { Changelog } from './site-content';
@@ -22,6 +23,21 @@ const fixtureEntries: ChangelogEntry[] = [
   { date: '2026-09-20', title: '9 月 20 日', description: '第四筆。' },
 ];
 
+const translatedFixtureContent = {
+  en: [
+    { title: 'Website launch', description: 'First entry in English.' },
+    { title: 'Second update', description: 'Second entry in English.' },
+    { title: 'Third update', description: 'Third entry in English.' },
+    { title: 'Fourth update', description: 'Fourth entry in English.' },
+  ],
+  'zh-cn': [
+    { title: '网站上线', description: '第一条简体中文记录。' },
+    { title: '第二次更新', description: '第二条简体中文记录。' },
+    { title: '第三次更新', description: '第三条简体中文记录。' },
+    { title: '第四次更新', description: '第四条简体中文记录。' },
+  ],
+} satisfies Record<Exclude<Locale, 'zh-tw'>, Pick<ChangelogEntry, 'title' | 'description'>[]>;
+
 const mockedGetChangelogEntries = vi.mocked(getChangelogEntries);
 
 function getRenderedEntries(markup: string) {
@@ -34,7 +50,12 @@ function getRenderedEntries(markup: string) {
 
 describe('Changelog component', () => {
   beforeEach(() => {
-    mockedGetChangelogEntries.mockReturnValue(fixtureEntries.map((entry) => ({ ...entry })));
+    mockedGetChangelogEntries.mockImplementation((locale: Locale = 'zh-tw') =>
+      fixtureEntries.map((entry, index) => ({
+        ...entry,
+        ...(locale === 'zh-tw' ? undefined : translatedFixtureContent[locale][index]),
+      })),
+    );
   });
 
   it('limit 只呈現最新三筆，跨月維持單一時間軸與日期順序', () => {
@@ -57,6 +78,39 @@ describe('Changelog component', () => {
     expect(markup).not.toMatch(/<section\b/);
     expect(markup).not.toContain('2026年10月');
     expect(markup).not.toContain('2026年9月');
+  });
+
+  it('按 locale 呈現已翻譯文案，並讓 limit 保留最新紀錄順序', () => {
+    const englishMarkup = renderToStaticMarkup(<Changelog locale="en" limit={2} />);
+    const simplifiedChineseMarkup = renderToStaticMarkup(
+      <Changelog locale="zh-cn" limit={2} />,
+    );
+
+    expect(getRenderedEntries(englishMarkup)).toEqual([
+      {
+        date: '2026-10-04',
+        title: 'Website launch',
+        description: 'First entry in English.',
+      },
+      {
+        date: '2026-10-02',
+        title: 'Second update',
+        description: 'Second entry in English.',
+      },
+    ]);
+    expect(getRenderedEntries(simplifiedChineseMarkup)).toEqual([
+      {
+        date: '2026-10-04',
+        title: '网站上线',
+        description: '第一条简体中文记录。',
+      },
+      {
+        date: '2026-10-02',
+        title: '第二次更新',
+        description: '第二条简体中文记录。',
+      },
+    ]);
+    expect(mockedGetChangelogEntries).toHaveBeenLastCalledWith('zh-cn');
   });
 
   it('limit 為 0 時顯示空紀錄提示且不產生時間軸', () => {

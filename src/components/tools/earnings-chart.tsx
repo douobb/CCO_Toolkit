@@ -4,9 +4,11 @@ import {
   useEffect,
   useId,
   useMemo,
+  useReducer,
   useRef,
   useState,
   type KeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
 } from 'react';
 import { Tabs } from '@base-ui/react/tabs';
 
@@ -23,6 +25,12 @@ import {
   getChartTickTextAnchor,
   getResponsiveChartDimensions,
 } from '@/lib/chart-layout';
+import {
+  getChartSelectionIndex,
+  hasChartTouchGestureMoved,
+  initialChartSelectionState,
+  reduceChartSelection,
+} from '@/lib/chart-selection';
 import { getChartViewportTicks } from '@/lib/chart-viewport';
 import {
   earningsActivityCatalog,
@@ -340,6 +348,7 @@ function EarningsChartSvg({
   onHoverSeries,
   onKeyboardPoint,
   onSelectPoint,
+  onClearSelection,
 }: {
   readonly data: EarningsChartData;
   readonly visibleActivityIds: readonly EarningsActivityId[];
@@ -352,9 +361,17 @@ function EarningsChartSvg({
   readonly onHoverSeries: (target: EarningsChartHoverTarget | null) => void;
   readonly onKeyboardPoint: (index: number | null) => void;
   readonly onSelectPoint: (index: number) => void;
+  readonly onClearSelection: () => void;
 }) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const plotClipPathId = `earnings-chart-plot-${useId()}`;
+  const touchGestureRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    moved: boolean;
+  } | null>(null);
+  const suppressTouchClickRef = useRef(false);
   const [containerWidth, setContainerWidth] = useState(chartDefaultWidth);
   const chartDimensions = getEarningsChartDimensions(containerWidth);
   const plotWidth = chartDimensions.width - chartDimensions.left - chartDimensions.right;
@@ -434,7 +451,7 @@ function EarningsChartSvg({
       event.preventDefault();
       onHoverPoint(null);
       onHoverSeries(null);
-      onKeyboardPoint(null);
+      onClearSelection();
       return;
     }
 
@@ -453,6 +470,48 @@ function EarningsChartSvg({
     const nextPoint = data.points[nextIndex];
     if (nextPoint) viewportControls.ensureLevelVisible(nextPoint.level);
     onKeyboardPoint(nextIndex);
+  };
+
+  const handlePointerDown = (event: ReactPointerEvent<SVGSVGElement>) => {
+    suppressTouchClickRef.current = false;
+    if (event.pointerType !== 'touch') return;
+    touchGestureRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      moved: false,
+    };
+  };
+
+  const handlePointerMove = (event: ReactPointerEvent<SVGSVGElement>) => {
+    const gesture = touchGestureRef.current;
+    if (gesture?.pointerId === event.pointerId && !gesture.moved
+      && hasChartTouchGestureMoved(
+        gesture.startX,
+        gesture.startY,
+        event.clientX,
+        event.clientY,
+      )) {
+      touchGestureRef.current = { ...gesture, moved: true };
+    }
+  };
+
+  const handlePointerUp = (event: ReactPointerEvent<SVGSVGElement>) => {
+    const gesture = touchGestureRef.current;
+    if (gesture?.pointerId !== event.pointerId) return;
+    suppressTouchClickRef.current = gesture.moved;
+    touchGestureRef.current = null;
+    onHoverPoint(null);
+    onHoverSeries(null);
+  };
+
+  const handlePointerCancel = (event: ReactPointerEvent<SVGSVGElement>) => {
+    const gesture = touchGestureRef.current;
+    if (event.pointerType !== 'touch' && gesture?.pointerId !== event.pointerId) return;
+    suppressTouchClickRef.current = true;
+    touchGestureRef.current = null;
+    onHoverPoint(null);
+    onHoverSeries(null);
   };
 
   return (
@@ -510,7 +569,15 @@ function EarningsChartSvg({
         data-active-level={activePoint.level}
         className="block h-auto w-full rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
         style={{ touchAction: 'pan-y pinch-zoom' }}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerCancel}
         onClick={(event) => {
+          if (event.detail !== 0 && suppressTouchClickRef.current) {
+            suppressTouchClickRef.current = false;
+            return;
+          }
           if (event.detail === 0 || !isClientPointInChartPlot(
             event.clientX,
             event.clientY,
@@ -782,18 +849,6 @@ function EarningsChartSvg({
             onHoverPoint(null);
             onHoverSeries(null);
           }}
-          onClick={(event) => {
-            const index = getPointFromClientX(
-              event.clientX,
-              event.currentTarget.ownerSVGElement,
-              data,
-              chartDimensions.width,
-              chartDimensions.left,
-              plotWidth,
-              viewportControls.viewport,
-            );
-            if (index !== null) onSelectPoint(index);
-          }}
         />
       </svg>
     </div>
@@ -818,10 +873,11 @@ export function EarningsTrendChart({
   const [activeGroupId, setActiveGroupId] = useState<EarningsChartGroupId>(
     defaultEarningsChartGroupId,
   );
-  const [hoveredPointIndex, setHoveredPointIndex] = useState<number | null>(null);
+  const [selection, dispatchSelection] = useReducer(
+    reduceChartSelection,
+    initialChartSelectionState,
+  );
   const [hoveredSeries, setHoveredSeries] = useState<EarningsChartHoverTarget | null>(null);
-  const [keyboardPointIndex, setKeyboardPointIndex] = useState<number | null>(null);
-  const [pinnedPointIndex, setPinnedPointIndex] = useState<number | null>(null);
   const [visibleVariableActivityIds, setVisibleVariableActivityIds] = useState<
     readonly EarningsActivityId[]
   >(defaultEarningsChartVisibleActivityIds);
@@ -843,14 +899,11 @@ export function EarningsTrendChart({
     0,
     Math.min(chartData.points.length - 1, inputs.searchLevel - chartData.minLevel),
   );
-  const activePointIndex = hoveredPointIndex
-    ?? keyboardPointIndex
-    ?? pinnedPointIndex
-    ?? defaultPointIndex;
+  const activePointIndex = getChartSelectionIndex(selection, defaultPointIndex)!;
   const activePoint = chartData.points[activePointIndex]!;
-  const resolvedHoveredSeries = hoveredSeries && hoveredPointIndex !== null
+  const resolvedHoveredSeries = hoveredSeries && selection.pointerIndex !== null
     ? (() => {
-        const value = chartData.points[hoveredPointIndex]?.values[hoveredSeries.activityId];
+        const value = chartData.points[selection.pointerIndex]?.values[hoveredSeries.activityId];
         return typeof value === 'number' && Number.isFinite(value)
           ? { ...hoveredSeries, value }
           : null;
@@ -865,17 +918,17 @@ export function EarningsTrendChart({
       aria-labelledby="earnings-chart-heading"
     >
       <Card>
-        <CardHeader>
+        <CardHeader className="px-3 sm:px-6">
           <CardTitle id="earnings-chart-heading" className="site-tool-section-heading">{labels.trendTitle}</CardTitle>
           <p className="text-sm leading-6 text-muted-foreground">{labels.trendDescription}</p>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-3 pt-0 sm:px-6">
           <Tabs.Root
             value={activeGroupId}
             onValueChange={(value) => {
               if (isEarningsChartGroupId(value)) {
                 setActiveGroupId(value);
-                setHoveredPointIndex(null);
+                dispatchSelection({ type: 'pointer-leave' });
                 setHoveredSeries(null);
               }
             }}
@@ -1024,10 +1077,15 @@ export function EarningsTrendChart({
                         labels={labels}
                         locale={locale}
                         formatNumber={formatNumber}
-                        onHoverPoint={setHoveredPointIndex}
+                        onHoverPoint={(index) => dispatchSelection(index === null
+                          ? { type: 'pointer-leave' }
+                          : { type: 'pointer-move', index })}
                         onHoverSeries={setHoveredSeries}
-                        onKeyboardPoint={setKeyboardPointIndex}
-                        onSelectPoint={setPinnedPointIndex}
+                        onKeyboardPoint={(index) => dispatchSelection(index === null
+                          ? { type: 'keyboard-blur' }
+                          : { type: 'keyboard-focus', index })}
+                        onSelectPoint={(index) => dispatchSelection({ type: 'pin', index })}
+                        onClearSelection={() => dispatchSelection({ type: 'reset' })}
                       />
                     </div>
                     <EarningsChartDetails

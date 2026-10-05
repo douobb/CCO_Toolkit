@@ -23,10 +23,13 @@ export function getResponsiveChartDimensions(
   const measuredWidth = Math.round(containerWidth || chartDefaultWidth);
   const width = Math.max(1, measuredWidth);
   const compact = measuredWidth < chartCompactBreakpoint;
+  const compactHeight = Math.max(210, Math.round(width / 4 + 130));
 
   return {
     width,
-    height: Math.min(400, Math.max(160, Math.round(width / 2))),
+    height: compact
+      ? compactHeight
+      : Math.min(400, Math.max(160, Math.round(width / 2))),
     left: chartYAxisTickLabelReserve + chartYAxisTickGap + (compact ? 2 : 6),
     right: compact ? 8 : 12,
     top: compact ? insets.compactTop : insets.wideTop,

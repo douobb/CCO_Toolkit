@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { Fragment, type ReactNode } from 'react';
 
 import {
   gameDataSetCatalog,
@@ -66,9 +66,24 @@ export function GameDataVersionTable({
   const labels = labelsByLocale[locale];
   const rows = Object.values(gameDataSetCatalog).map((dataSet) => {
     const data = getGameDataMetadata<unknown>(dataSet);
+    const datasetIdParts = data.datasetId.split('-');
+    const datasetId = (
+      <>
+        {datasetIdParts.map((part, index) => (
+          <Fragment key={`${data.datasetId}-${index}`}>
+            {part}
+            {index < datasetIdParts.length - 1 ? (
+              <>
+                -<wbr />
+              </>
+            ) : null}
+          </Fragment>
+        ))}
+      </>
+    );
 
     return [
-      data.datasetId,
+      datasetId,
       data.domain,
       data.schemaVersion,
       data.dataVersion,
@@ -80,7 +95,7 @@ export function GameDataVersionTable({
             href={source.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="break-words underline underline-offset-4 hover:text-fd-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fd-ring"
+            className="underline underline-offset-4 hover:text-fd-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fd-ring"
           >
             {source.name}
           </a>
@@ -91,16 +106,17 @@ export function GameDataVersionTable({
 
   return (
     <DataTable
+      data-game-data-version-table=""
       ariaLabel={labels.ariaLabel}
       caption={title ?? labels.caption}
       rowHeader
       columns={[
-        labels.dataset,
-        labels.domain,
-        labels.schemaVersion,
-        labels.dataVersion,
-        labels.updatedAt,
-        labels.source,
+        { id: 'dataset', label: labels.dataset, width: '150px' },
+        { id: 'domain', label: labels.domain, width: '132px' },
+        { id: 'schema-version', label: labels.schemaVersion, width: '136px' },
+        { id: 'data-version', label: labels.dataVersion, width: '224px' },
+        { id: 'updated-at', label: labels.updatedAt, width: '120px' },
+        { id: 'source', label: labels.source, width: '194px' },
       ]}
       rows={rows}
     />

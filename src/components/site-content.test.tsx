@@ -8,6 +8,7 @@ import {
   type ContributorProfile,
   type ContributorRecordView,
 } from '@/lib/site-content';
+import { getMessages } from '@/lib/translations';
 
 import {
   ContributorDialogBody,
@@ -188,6 +189,25 @@ describe('Contributors', () => {
     expect(ownerDialog).not.toContain('data-contributor-detail');
     expect(ownerDialog).not.toContain('已採用貢獻紀錄');
 
+    for (const locale of ['zh-cn', 'en'] as const) {
+      const localizedOwnerDialog = renderToStaticMarkup(
+        <ContributorDialogBody locale={locale} entry={owner} recordViews={[]} />,
+      );
+      const ownerMessages = getMessages(locale).aboutPage.ownerProfile;
+
+      expect(localizedOwnerDialog).toContain('douobb');
+      for (const message of [
+        ownerMessages.avatarAlt,
+        ownerMessages.introduction,
+        ownerMessages.contactLabel,
+        ownerMessages.contactText,
+        ownerMessages.noteLabel,
+        ownerMessages.noteText,
+      ]) {
+        expect(localizedOwnerDialog).toContain(message);
+      }
+    }
+
     const groups = getPublicContributorGroups(fixtureProfiles, fixtureRecords);
     const maintainerDialog = renderToStaticMarkup(
       <ContributorDialogBody
@@ -358,24 +378,60 @@ describe('Recommendation grids', () => {
     expect(markup).not.toMatch(/guild|公會推薦|SUI/i);
   });
 
-  it('依三種網站語系顯示官方 Discord 的翻譯文案', () => {
-    expect(renderToStaticMarkup(<RecommendationsGrid locale="zh-tw" />)).toContain(
-      '官方 Discord',
-    );
-    expect(renderToStaticMarkup(<RecommendationsGrid locale="zh-tw" />)).toContain(
-      '內部包含公頻聊天紀錄與官方消息。',
-    );
-    expect(renderToStaticMarkup(<RecommendationsGrid locale="zh-cn" />)).toContain(
-      '官方 Discord',
-    );
-    expect(renderToStaticMarkup(<RecommendationsGrid locale="zh-cn" />)).toContain(
-      '内含公共频道聊天记录与官方消息。',
-    );
-    expect(renderToStaticMarkup(<RecommendationsGrid locale="en" />)).toContain(
-      'Official Discord',
-    );
-    expect(renderToStaticMarkup(<RecommendationsGrid locale="en" />)).toContain(
-      'Includes public-channel chat logs and official announcements.',
-    );
+  it('三語推薦卡片都顯示本地化名稱、分類、描述、備註與圖片替代文字', () => {
+    const localizedContent = [
+      {
+        locale: 'zh-tw',
+        text: [
+          'SL DATA',
+          '香格里拉數據中心，記錄著機密資料。',
+          '資料網站',
+          'CCO Found',
+          '關於CCO裡的機率、公式、遊戲細節進行整理',
+          '使用前請先複製一分到自己雲端，不要直接修改共用檔案',
+          '官方 Discord',
+          '內部包含公頻聊天紀錄與官方消息。',
+          '社群網站',
+          'alt="Discord 官方標誌"',
+        ],
+      },
+      {
+        locale: 'zh-cn',
+        text: [
+          'SL DATA',
+          '香格里拉数据中心，记录着机密资料。',
+          '数据网站',
+          'CCO Found',
+          '整理 CCO 的概率、公式与游戏细节。',
+          '使用前请先复制一份到自己的云端，不要直接修改共享文件。',
+          '官方 Discord',
+          '包含公共频道聊天记录和官方公告。',
+          '社群网站',
+          'alt="Discord 官方标志"',
+        ],
+      },
+      {
+        locale: 'en',
+        text: [
+          'SL DATA',
+          'A Shangri-La data center containing confidential records.',
+          'Data website',
+          'CCO Found',
+          'A collection of CCO probabilities, formulas, and game details.',
+          'Copy it to your own drive before use; do not edit the shared file directly.',
+          'Official Discord',
+          'Includes public-channel chat logs and official announcements.',
+          'Community website',
+          'alt="Official Discord logo"',
+        ],
+      },
+    ] as const;
+
+    for (const { locale, text } of localizedContent) {
+      const markup = renderToStaticMarkup(<RecommendationsGrid locale={locale} />);
+      for (const expectedText of text) {
+        expect(markup).toContain(expectedText);
+      }
+    }
   });
 });

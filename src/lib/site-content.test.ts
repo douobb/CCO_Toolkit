@@ -100,7 +100,39 @@ describe('網站內容資料', () => {
       title: '網站正式部屬',
       description: 'CCO Toolkit 正式部署至 GitHub Pages。',
     });
-    expect(entries[1]).toMatchObject({ date: '2026-08-26', title: '網站開始建立' });
+    expect(entries[1]).toMatchObject({
+      date: '2026-08-26',
+      title: '網站開始建立',
+      description: '建立 CCO Toolkit 的初始 Foundation，固定網站的內容、語系與部署架構。',
+    });
+  });
+
+  it('依語系解析更新紀錄，未指定語系時維持繁中預設', () => {
+    expect(getChangelogEntries('en')).toMatchObject([
+      {
+        date: '2026-10-04',
+        title: 'CCO Toolkit launched',
+        description: 'CCO Toolkit is now live on GitHub Pages.',
+      },
+      {
+        date: '2026-08-26',
+        title: 'CCO Toolkit development began',
+        description:
+          'Built the initial foundation for CCO Toolkit and established its content, localization, and deployment architecture.',
+      },
+    ]);
+    expect(getChangelogEntries('zh-cn')).toMatchObject([
+      {
+        date: '2026-10-04',
+        title: '网站正式上线',
+        description: 'CCO Toolkit 已正式部署至 GitHub Pages。',
+      },
+      {
+        date: '2026-08-26',
+        title: '网站开始建设',
+        description: '搭建 CCO Toolkit 的初始架构，确定网站的内容、语言与部署方式。',
+      },
+    ]);
   });
 
   it('依月份分組更新紀錄並保留日期格式', () => {
@@ -124,6 +156,14 @@ describe('網站內容資料', () => {
     expect(
       getChangelogGroups('zh-cn').map(({ key, label }) => ({ key, label })),
     ).toEqual(expectedGroups);
+    expect(getChangelogGroups('zh-cn')[0].entries[0]).toMatchObject({
+      title: '网站正式上线',
+      description: 'CCO Toolkit 已正式部署至 GitHub Pages。',
+    });
+    expect(getChangelogGroups('en')[0].entries[0]).toMatchObject({
+      title: 'CCO Toolkit launched',
+      description: 'CCO Toolkit is now live on GitHub Pages.',
+    });
     expect(formatChangelogDate(changelogEntries[0].date, 'zh-tw')).toBe('2026/10/04');
     expect(formatChangelogDate(changelogEntries[0].date, 'zh-cn')).toBe('2026/10/04');
     expect(formatChangelogDate(changelogEntries[0].date, 'en')).toBe('10/04/2026');
@@ -295,19 +335,72 @@ describe('網站內容資料', () => {
     });
   });
 
-  it('保留官方 Discord 的三語名稱、說明與邀請連結', () => {
-    expect(getMessages('zh-tw').recommendationsPage.recommendationItems['official-discord']).toMatchObject({
-      name: '官方 Discord',
-      description: '內部包含公頻聊天紀錄與官方消息。',
-    });
-    expect(getMessages('zh-cn').recommendationsPage.recommendationItems['official-discord']).toMatchObject({
-      name: '官方 Discord',
-      description: '内含公共频道聊天记录与官方消息。',
-    });
-    expect(getMessages('en').recommendationsPage.recommendationItems['official-discord']).toMatchObject({
-      name: 'Official Discord',
-      description: 'Includes public-channel chat logs and official announcements.',
-    });
+  it('三語推薦映射完整包含名稱、分類、描述、備註與圖片替代文字', () => {
+    const expected = {
+      'zh-tw': {
+        'sl-data': {
+          name: 'SL DATA',
+          description: '香格里拉數據中心，記錄著機密資料。',
+          category: '資料網站',
+        },
+        'cco-found': {
+          name: 'CCO Found',
+          description: '關於CCO裡的機率、公式、遊戲細節進行整理',
+          category: '資料網站',
+          note: '使用前請先複製一分到自己雲端，不要直接修改共用檔案',
+        },
+        'official-discord': {
+          name: '官方 Discord',
+          description: '內部包含公頻聊天紀錄與官方消息。',
+          category: '社群網站',
+          imageAlt: 'Discord 官方標誌',
+        },
+      },
+      'zh-cn': {
+        'sl-data': {
+          name: 'SL DATA',
+          description: '香格里拉数据中心，记录着机密资料。',
+          category: '数据网站',
+        },
+        'cco-found': {
+          name: 'CCO Found',
+          description: '整理 CCO 的概率、公式与游戏细节。',
+          category: '数据网站',
+          note: '使用前请先复制一份到自己的云端，不要直接修改共享文件。',
+        },
+        'official-discord': {
+          name: '官方 Discord',
+          description: '包含公共频道聊天记录和官方公告。',
+          category: '社群网站',
+          imageAlt: 'Discord 官方标志',
+        },
+      },
+      en: {
+        'sl-data': {
+          name: 'SL DATA',
+          description: 'A Shangri-La data center containing confidential records.',
+          category: 'Data website',
+        },
+        'cco-found': {
+          name: 'CCO Found',
+          description: 'A collection of CCO probabilities, formulas, and game details.',
+          category: 'Data website',
+          note: 'Copy it to your own drive before use; do not edit the shared file directly.',
+        },
+        'official-discord': {
+          name: 'Official Discord',
+          description: 'Includes public-channel chat logs and official announcements.',
+          category: 'Community website',
+          imageAlt: 'Official Discord logo',
+        },
+      },
+    } as const;
+
+    for (const locale of ['zh-tw', 'zh-cn', 'en'] as const) {
+      expect(getMessages(locale).recommendationsPage.recommendationItems).toEqual(
+        expected[locale],
+      );
+    }
     expect(getRecommendations().find((recommendation) => recommendation.id === 'official-discord')?.url)
       .toBe('https://discord.com/invite/JREx8xz');
   });

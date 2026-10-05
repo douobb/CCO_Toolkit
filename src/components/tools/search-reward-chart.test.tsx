@@ -38,6 +38,48 @@ function renderChartMarkup(locale: 'zh-tw' | 'zh-cn' | 'en' = 'zh-tw') {
   return markup;
 }
 
+const quantitySeriesIds = ['medical', 'ammo', 'military'] as const;
+
+function getSeriesPoint(svg: SVGSVGElement, seriesId: string, index: number) {
+  const path = svg.querySelector<SVGPathElement>(
+    `[data-search-reward-chart-series="${seriesId}"]`,
+  );
+  const coordinates = path?.getAttribute('d')?.match(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi);
+  const x = Number(coordinates?.[index * 2]);
+  const y = Number(coordinates?.[index * 2 + 1]);
+  return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
+}
+
+function getDistinctSeriesPoint(svg: SVGSVGElement, seriesId: typeof quantitySeriesIds[number]) {
+  const targetPath = svg.querySelector<SVGPathElement>(
+    `[data-search-reward-chart-series="${seriesId}"]`,
+  );
+  const pointCount = targetPath?.getAttribute('d')?.match(/(?:^|\s)[ML]\s/gi)?.length ?? 0;
+
+  for (let index = 0; index < pointCount; index += 1) {
+    const point = getSeriesPoint(svg, seriesId, index);
+    if (!point) continue;
+    const separatedFromOtherSeries = quantitySeriesIds
+      .filter((candidate) => candidate !== seriesId)
+      .every((candidate) => {
+        const otherPoint = getSeriesPoint(svg, candidate, index);
+        return otherPoint !== null && Math.abs(otherPoint.y - point.y) > 12;
+      });
+    if (separatedFromOtherSeries) return point;
+  }
+
+  return null;
+}
+
+function dispatchPointerMove(svg: SVGSVGElement, point: { x: number; y: number }) {
+  svg.dispatchEvent(new PointerEvent('pointermove', {
+    bubbles: true,
+    pointerType: 'mouse',
+    clientX: point.x,
+    clientY: point.y,
+  }));
+}
+
 afterEach(() => {
   window.localStorage.clear();
   document.body.replaceChildren();
@@ -47,11 +89,12 @@ describe('Search Reward chart UI', () => {
   it('窄容器維持可讀文字、寬幅比例與完整座標刻度', () => {
     const compact = getSearchRewardChartDimensions(360);
     const mobile = getSearchRewardChartDimensions(320);
+    const wideMobile = getSearchRewardChartDimensions(400);
     const desktop = getSearchRewardChartDimensions(960);
 
     expect(compact).toMatchObject({
       width: 360,
-      height: 180,
+      height: 220,
       left: 44,
       right: 8,
       top: 24,
@@ -65,7 +108,8 @@ describe('Search Reward chart UI', () => {
       top: 30,
       bottom: 62,
     });
-    expect(mobile).toMatchObject({ width: 320, height: 160 });
+    expect(mobile).toMatchObject({ width: 320, height: 210 });
+    expect(wideMobile).toMatchObject({ width: 400, height: 230 });
     expect(compact.width - compact.left - compact.right).toBeGreaterThan(300);
     expect(desktop.width - desktop.left - desktop.right).toBeGreaterThan(868);
     expect(compact.left - chartYAxisTickGap).toBeGreaterThanOrEqual(
@@ -76,15 +120,25 @@ describe('Search Reward chart UI', () => {
     )).toBeLessThanOrEqual(compact.left - chartYAxisTickGap);
   });
 
-  it('提供收益／產量切換、實際資料點、階梯點標記與可存取互動目標', () => {
+  it('提供收益／產量切換、階梯點標記與單一可存取圖表鍵盤入口', () => {
     const markup = renderChartMarkup();
     const parsed = document.createElement('div');
     parsed.innerHTML = markup;
     const chartSvgContainer = parsed.querySelector('[data-chart-metric]');
     const chartRegion = parsed.querySelector('[data-chart-region]');
     const chartSvg = chartSvgContainer?.querySelector('svg');
+    const cardContent = parsed.querySelector(
+      '[data-search-reward-chart] > div > div:last-child',
+    );
+    const cardHeader = parsed.querySelector(
+      '[data-search-reward-chart] > div > div:first-child',
+    );
 
     expect(markup).toContain('data-search-reward-chart="true"');
+    expect(cardHeader?.className).toContain('px-3');
+    expect(cardHeader?.className).toContain('sm:px-6');
+    expect(cardContent?.className).toContain('px-3');
+    expect(cardContent?.className).toContain('sm:px-6');
     expect(chartRegion?.getAttribute('role')).toBe('region');
     expect(chartRegion?.className).not.toContain('overflow-x-auto');
     expect(chartRegion?.hasAttribute('tabindex')).toBe(false);
@@ -94,13 +148,22 @@ describe('Search Reward chart UI', () => {
     expect(markup).toContain('各類物品預期產出數量');
     expect(markup).toContain('預期收益');
     expect(markup).toContain('收益階梯點');
-    expect(markup).toContain('role="button"');
+    expect(chartSvg?.querySelectorAll('[role="button"]')).toHaveLength(0);
     expect(markup).toContain('tabindex="0"');
     expect((markup.match(/tabindex="0"/g) ?? []).length).toBe(1);
-    expect(chartSvgContainer?.querySelectorAll('[role="button"][tabindex="0"]')).toHaveLength(1);
-    expect(markup).toContain('aria-label="Lv.1 地區');
+    expect(chartSvg?.getAttribute('tabindex')).toBe('0');
+    expect(chartSvg?.getAttribute('role')).toBe('group');
+    expect(chartSvg?.getAttribute('class')).toContain('focus-visible:ring');
+    expect(chartSvg?.querySelectorAll('circle[tabindex], circle[role]')).toHaveLength(0);
+    expect(markup).toContain('search-reward-chart-active-point-description');
     expect(markup).toContain('data-ladder-point="true"');
     expect(markup).not.toContain('ladder-point-line');
+    expect(chartSvg?.querySelectorAll('[data-search-reward-chart-hover-callout]')).toHaveLength(0);
+    const selectedPoint = chartSvg?.querySelector('[data-selected-point]');
+    expect(selectedPoint?.querySelectorAll('line')).toHaveLength(1);
+    expect(selectedPoint?.querySelector('line')?.getAttribute('x1'))
+      .toBe(selectedPoint?.querySelector('line')?.getAttribute('x2'));
+    expect(chartSvg?.querySelectorAll('[data-chart-y-gridline="true"]')).toHaveLength(5);
     expect(chartSvgContainer?.querySelector('svg')?.tagName.toLowerCase()).toBe('svg');
     expect(chartSvg?.getAttribute('data-chart-width')).toBe('960');
     expect(chartSvg?.getAttribute('data-chart-tick-count')).toBe('5');
@@ -286,7 +349,88 @@ describe('Search Reward chart UI', () => {
     store.dispose();
   });
 
-  it('hover、focus、click 與左右方向鍵可選取及移動資料點', async () => {
+  it('靠近曲線才顯示系列 callout；收益帶單位，產量各線顯示名稱與數值', async () => {
+    const store = createSharedUserInputsStore({ storage: null });
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <SharedUserInputsProvider store={store}>
+          <SearchRewardToolProvider>
+            <SearchRewardChart labels={getMessages('zh-tw').tools.searchReward} locale="zh-tw" />
+          </SearchRewardToolProvider>
+        </SharedUserInputsProvider>,
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const svg = container.querySelector<SVGSVGElement>('[data-chart-metric] svg')!;
+    const details = () => container.querySelector('[data-selected-point-details]')?.textContent ?? '';
+    const callout = () => svg.querySelector<SVGGElement>(
+      '[data-search-reward-chart-hover-callout="true"]',
+    );
+    Object.defineProperty(svg, 'getBoundingClientRect', {
+      value: () => ({ left: 0, top: 0, width: 960, height: 400 }),
+    });
+
+    expect(callout()).toBeNull();
+    const valuePoint = getSeriesPoint(svg, 'value', 120)!;
+    await act(async () => dispatchPointerMove(svg, valuePoint));
+    expect(callout()?.getAttribute('data-search-reward-chart-hover-series')).toBe('value');
+    expect(callout()?.textContent).toContain('預估收益');
+    expect(callout()?.textContent).toContain('AI／批');
+    expect(callout()?.textContent).toMatch(/\d/);
+    expect(svg.querySelectorAll('[data-selected-point] circle')).toHaveLength(1);
+    const valueCalloutRect = callout()?.querySelector('rect');
+    const valueCalloutBounds = {
+      x: Number(valueCalloutRect?.getAttribute('x')),
+      y: Number(valueCalloutRect?.getAttribute('y')),
+      width: Number(valueCalloutRect?.getAttribute('width')),
+      height: Number(valueCalloutRect?.getAttribute('height')),
+    };
+    expect(valueCalloutBounds.x).toBeGreaterThanOrEqual(48);
+    expect(valueCalloutBounds.x + valueCalloutBounds.width).toBeLessThanOrEqual(948);
+    expect(valueCalloutBounds.y).toBeGreaterThanOrEqual(30);
+    expect(valueCalloutBounds.y + valueCalloutBounds.height).toBeLessThanOrEqual(338);
+
+    const previewDetails = details();
+    await act(async () => {
+      svg.dispatchEvent(new PointerEvent('pointerout', { bubbles: true }));
+    });
+    expect(callout()).toBeNull();
+    expect(details()).toBe(previewDetails);
+
+    const quantityRadio = container.querySelector<HTMLInputElement>(
+      '#search-reward-chart-metric-quantity',
+    );
+    await act(async () => {
+      quantityRadio?.click();
+      await Promise.resolve();
+    });
+
+    const labels = getMessages('zh-tw').tools.searchReward;
+    const expectedLabels = {
+      medical: labels.medicalParts,
+      ammo: labels.ammoParts,
+      military: labels.militaryAmmoParts,
+    } as const;
+    for (const seriesId of quantitySeriesIds) {
+      const point = getDistinctSeriesPoint(svg, seriesId);
+      expect(point).not.toBeNull();
+      await act(async () => dispatchPointerMove(svg, point!));
+      expect(callout()?.getAttribute('data-search-reward-chart-hover-series')).toBe(seriesId);
+      expect(callout()?.textContent).toContain(expectedLabels[seriesId]);
+      expect(callout()?.textContent).toMatch(/\d/);
+    }
+
+    await act(async () => root.unmount());
+    store.dispose();
+  });
+
+  it('整張 SVG 是唯一資料圖表焦點；方向鍵移動、Enter pin、Escape 清除', async () => {
     const store = createSharedUserInputsStore({ storage: null });
     const container = document.createElement('div');
     document.body.append(container);
@@ -305,39 +449,169 @@ describe('Search Reward chart UI', () => {
     });
 
     const chart = container.querySelector('[data-search-reward-chart]');
-    const targets = chart?.querySelectorAll('[role="button"]');
-    expect(targets?.length).toBe(240);
-    const tabStops = Array.from(targets ?? []).filter(
-      (target) => target.getAttribute('tabindex') === '0',
-    );
-    expect(tabStops).toHaveLength(1);
-    const first = targets?.[0] as SVGCircleElement | undefined;
-    const second = targets?.[1] as SVGCircleElement | undefined;
-    expect(first).toBeDefined();
-    expect(second).toBeDefined();
-    expect(first?.getAttribute('tabindex')).toBe('0');
-    expect(first?.getAttribute('aria-pressed')).toBe('false');
-    expect(chart?.querySelector('[data-selected-point-details]')?.textContent).toContain('Lv.1 地區');
+    const svg = chart?.querySelector<SVGSVGElement>('svg');
+    const details = () => chart?.querySelector('[data-selected-point-details]')?.textContent ?? '';
+    expect(svg?.getAttribute('tabindex')).toBe('0');
+    expect(svg?.querySelectorAll('[role="button"], circle[tabindex]')).toHaveLength(0);
+    expect(details()).toContain('Lv.1 地區');
+
+    await act(async () => svg?.focus());
+    expect(document.activeElement).toBe(svg);
+    await act(async () => {
+      svg?.dispatchEvent(new KeyboardEvent('keydown', {
+        bubbles: true,
+        key: 'ArrowRight',
+      }));
+    });
+    expect(details()).toContain('Lv.4 地區');
 
     await act(async () => {
-      first?.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+      svg?.dispatchEvent(new KeyboardEvent('keydown', {
+        bubbles: true,
+        key: 'Enter',
+      }));
+      svg?.dispatchEvent(new KeyboardEvent('keydown', {
+        bubbles: true,
+        key: 'ArrowLeft',
+      }));
     });
-    expect(chart?.querySelector('[data-selected-point-details]')?.textContent).toContain('Lv.1 地區');
+    expect(details()).toContain('Lv.1 地區');
+
+    await act(async () => svg?.blur());
+    expect(details()).toContain('Lv.4 地區');
+    await act(async () => svg?.focus());
+    await act(async () => {
+      svg?.dispatchEvent(new KeyboardEvent('keydown', {
+        bubbles: true,
+        key: 'Escape',
+      }));
+    });
+    expect(details()).toContain('Lv.1 地區');
+
+    await act(async () => root.unmount());
+    store.dispose();
+  });
+
+  it('離開時保留最後檢視或恢復 pin，觸控拖曳與取消不會誤鎖定', async () => {
+    const store = createSharedUserInputsStore({ storage: null });
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
 
     await act(async () => {
-      first?.focus();
+      root.render(
+        <SharedUserInputsProvider store={store}>
+          <SearchRewardToolProvider>
+            <SearchRewardChart labels={getMessages('zh-tw').tools.searchReward} locale="zh-tw" />
+          </SearchRewardToolProvider>
+        </SharedUserInputsProvider>,
+      );
+      await Promise.resolve();
     });
-    expect(first?.getAttribute('aria-pressed')).toBe('false');
+
+    const svg = container.querySelector<SVGSVGElement>('svg[data-chart-width]')!;
+    const details = () => container.querySelector('[data-selected-point-details]')?.textContent ?? '';
+    const initialDetails = details();
+    const xAt = (index: number) => getSeriesPoint(svg, 'value', index)!.x;
+    const clickAt = (x: number, y: number) => svg.dispatchEvent(new MouseEvent('click', {
+      bubbles: true,
+      detail: 1,
+      clientX: x,
+      clientY: y,
+    }));
+    const line = container.querySelector('[data-current-level-line]');
+    const currentLevelX = line?.getAttribute('x1');
+    Object.defineProperty(svg, 'getBoundingClientRect', {
+      value: () => ({ left: 0, top: 0, width: 960, height: 400 }),
+    });
+
+    const dispatchTouchPointer = (
+      type: 'pointerdown' | 'pointermove' | 'pointerup' | 'pointercancel',
+      x: number,
+      y: number,
+      pointerId = 17,
+    ) => svg.dispatchEvent(new PointerEvent(type, {
+      bubbles: true,
+      pointerId,
+      pointerType: 'touch',
+      isPrimary: true,
+      clientX: x,
+      clientY: y,
+    }));
 
     await act(async () => {
-      first?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      first?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+      svg.dispatchEvent(new PointerEvent('pointermove', {
+        bubbles: true,
+        clientX: xAt(180),
+        clientY: 120,
+      }));
+      svg.dispatchEvent(new PointerEvent('pointerout', { bubbles: true }));
     });
-    expect(first?.getAttribute('aria-pressed')).toBe('true');
-    expect(second?.getAttribute('aria-pressed')).toBe('false');
-    expect(first?.getAttribute('tabindex')).toBe('-1');
-    expect(second?.getAttribute('tabindex')).toBe('0');
-    expect(chart?.querySelector('[data-selected-point-details]')?.textContent).toContain('Lv.4 地區');
+    const lastPreview = details();
+    expect(lastPreview).not.toBe(initialDetails);
+    expect(line?.getAttribute('x1')).toBe(currentLevelX);
+
+    await act(async () => {
+      dispatchTouchPointer('pointerdown', xAt(180), 120);
+      dispatchTouchPointer('pointermove', xAt(130), 145);
+      dispatchTouchPointer('pointerup', xAt(130), 145);
+      clickAt(xAt(130), 145);
+    });
+    const dragPreview = details();
+    expect(dragPreview).not.toBe(initialDetails);
+
+    await act(async () => {
+      svg.dispatchEvent(new PointerEvent('pointermove', {
+        bubbles: true,
+        clientX: xAt(50),
+        clientY: 120,
+      }));
+      svg.dispatchEvent(new PointerEvent('pointerout', { bubbles: true }));
+    });
+    const previewAfterDrag = details();
+    expect(previewAfterDrag).not.toBe(dragPreview);
+    await act(async () => {
+      dispatchTouchPointer('pointerdown', xAt(50), 120, 18);
+      dispatchTouchPointer('pointermove', xAt(80), 130, 18);
+      dispatchTouchPointer('pointercancel', xAt(80), 130, 18);
+      clickAt(xAt(80), 130);
+    });
+    const cancelledTouchPreview = details();
+    expect(cancelledTouchPreview).not.toBe(previewAfterDrag);
+    await act(async () => {
+      svg.dispatchEvent(new PointerEvent('pointermove', {
+        bubbles: true,
+        clientX: xAt(50),
+        clientY: 120,
+      }));
+      svg.dispatchEvent(new PointerEvent('pointerout', { bubbles: true }));
+    });
+    expect(details()).toBe(previewAfterDrag);
+
+    await act(async () => {
+      dispatchTouchPointer('pointerdown', xAt(70), 120, 19);
+      dispatchTouchPointer('pointerup', xAt(70), 120, 19);
+      clickAt(xAt(70), 120);
+    });
+    const pinnedDetails = details();
+
+    await act(async () => {
+      svg.dispatchEvent(new PointerEvent('pointermove', {
+        bubbles: true,
+        clientX: xAt(20),
+        clientY: 120,
+      }));
+      svg.dispatchEvent(new PointerEvent('pointerout', { bubbles: true }));
+    });
+    expect(details()).toBe(pinnedDetails);
+    await act(async () => {
+      svg.focus();
+      svg.dispatchEvent(new KeyboardEvent('keydown', {
+        bubbles: true,
+        key: 'Escape',
+      }));
+    });
+    expect(details()).toBe(initialDetails);
 
     await act(async () => root.unmount());
     store.dispose();
@@ -441,8 +715,13 @@ describe('Search Reward chart UI', () => {
     expect(Number(svg.getAttribute('data-chart-x-min'))).toBe(centeredMin);
     expect(Number(svg.getAttribute('data-chart-x-max'))).toBe(centeredMax);
 
-    const firstPoint = svg.querySelector<SVGCircleElement>('circle[role="button"]')!;
-    await act(async () => firstPoint.focus());
+    await act(async () => {
+      svg.dispatchEvent(new KeyboardEvent('keydown', {
+        bubbles: true,
+        key: 'Escape',
+      }));
+    });
+    await act(async () => svg.focus());
     const focusedMin = Number(svg.getAttribute('data-chart-x-min'));
     const focusedMax = Number(svg.getAttribute('data-chart-x-max'));
     expect(focusedMin).toBe(1);
@@ -451,6 +730,7 @@ describe('Search Reward chart UI', () => {
     expect([svg.getAttribute('data-chart-y-min'), svg.getAttribute('data-chart-y-max')])
       .toEqual(initialYDomain);
 
+    const detailsBeforeClick = container.querySelector('[data-selected-point-details]')?.textContent;
     await act(async () => {
       svg.dispatchEvent(new MouseEvent('click', {
         bubbles: true,
@@ -459,7 +739,8 @@ describe('Search Reward chart UI', () => {
         clientY: 160,
       }));
     });
-    expect(container.querySelectorAll('[role="button"][aria-pressed="true"]')).toHaveLength(1);
+    expect(container.querySelector('[data-selected-point-details]')?.textContent)
+      .not.toBe(detailsBeforeClick);
 
     await act(async () => resetButton.click());
     expect(svg.getAttribute('data-chart-x-min')).toBe('1');
@@ -492,11 +773,13 @@ describe('Search Reward chart UI', () => {
     });
 
     const chart = container.querySelector('[data-search-reward-chart]');
-    const first = chart?.querySelector('[role="button"]') as SVGCircleElement | null;
-    const initialLabel = first?.getAttribute('aria-label');
+    const activePointDescription = () => chart?.querySelector(
+      '#search-reward-chart-active-point-description',
+    )?.textContent;
+    const initialDescription = activePointDescription();
     const input = container.querySelector('#search-reward-count') as HTMLInputElement | null;
     expect(input).not.toBeNull();
-    expect(initialLabel).toContain('預估收益');
+    expect(initialDescription).toContain('預估收益');
 
     await act(async () => {
       if (!input) return;
@@ -506,7 +789,7 @@ describe('Search Reward chart UI', () => {
       await Promise.resolve();
     });
 
-    expect(first?.getAttribute('aria-label')).not.toBe(initialLabel);
+    expect(activePointDescription()).not.toBe(initialDescription);
 
     await act(async () => root.unmount());
     store.dispose();
