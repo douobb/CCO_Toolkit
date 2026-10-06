@@ -51,6 +51,10 @@ import {
   type SharedUserInputsDraft,
   type SharedUserInputsDraftErrors,
 } from './shared-user-inputs-form';
+import {
+  type SharedEquipmentField,
+  type SharedUserInputsFilter,
+} from './shared-user-inputs-filter';
 
 export interface SharedUserInputsManagerLabels {
   progressionTitle: string;
@@ -113,12 +117,12 @@ function Field({
 
   return (
     <div className="space-y-2">
-      <div className="flex items-baseline justify-between gap-3">
-        <Label htmlFor={id}>{label}</Label>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <Label htmlFor={id} className="min-w-0 break-words">{label}</Label>
         {range ? (
           <span
             id={rangeId}
-            className="text-right text-xs leading-5 text-muted-foreground"
+            className="max-w-full break-words text-right text-xs leading-5 text-muted-foreground"
           >
             {range}
           </span>
@@ -141,6 +145,21 @@ function getFieldDescribedBy(id: string, error?: string): string | undefined {
 }
 
 const marketPriceDisplayCurrencies: readonly MarketCurrency[] = ['ai', 'btc'];
+const equipmentFieldIds: readonly SharedEquipmentField[] = [
+  'bargainPercent',
+  'maxHealth',
+  'armor',
+  'destructiveWeaponDamage',
+  'criticalDamagePercent',
+  'damageReductionPercent',
+];
+
+function includesField<T extends string>(
+  fields: readonly T[] | undefined,
+  id: T,
+): boolean {
+  return fields === undefined || fields.includes(id);
+}
 
 /** draft 匯率無效時回到目前 snapshot 的 resolved 值，避免單位與數值不一致。 */
 function getDraftBtcPerAi(
@@ -246,11 +265,15 @@ export function SharedUserInputsManager({
   locale,
   mode = 'full',
   idPrefix,
+  filter,
+  emptyMessage,
 }: {
   labels: SharedUserInputsManagerLabels;
   locale: Locale;
   mode?: SharedUserInputsManagerMode;
   idPrefix?: string;
+  filter?: SharedUserInputsFilter;
+  emptyMessage?: string;
 }) {
   const snapshot = useSharedUserInputs();
   const store = useSharedUserInputsStore();
@@ -260,6 +283,7 @@ export function SharedUserInputsManager({
     useState<MarketCurrency>('ai');
   const lastSnapshot = useRef(snapshot);
   const resolvedBtcPerAi = resolveMarketPrices(snapshot).btcPerAi;
+  const visibleFilter = mode === 'quick' ? filter : undefined;
 
   useEffect(() => {
     if (snapshot === lastSnapshot.current) return;
@@ -285,13 +309,30 @@ export function SharedUserInputsManager({
 
   const restoreDefaultPrices = useCallback(() => {
     const defaults = createDefaultSharedMarketDrafts();
+    const defaultPricesById = new Map(defaults.prices.map((price) => [price.itemId, price]));
+    const defaultExchangeRatesById = new Map(
+      defaults.exchangeRates.map((rate) => [rate.id, rate]),
+    );
+    const defaultCacheRatesById = new Map(defaults.cacheRates.map((rate) => [rate.id, rate]));
     commit({
       ...draft,
-      prices: defaults.prices,
-      exchangeRates: defaults.exchangeRates,
-      cacheRates: defaults.cacheRates,
+      prices: draft.prices.map((price) =>
+        includesField(visibleFilter?.prices, price.itemId)
+          ? defaultPricesById.get(price.itemId) ?? price
+          : price,
+      ),
+      exchangeRates: draft.exchangeRates.map((rate) =>
+        includesField(visibleFilter?.exchangeRates, rate.id)
+          ? defaultExchangeRatesById.get(rate.id) ?? rate
+          : rate,
+      ),
+      cacheRates: draft.cacheRates.map((rate) =>
+        includesField(visibleFilter?.cacheRates, rate.id)
+          ? defaultCacheRatesById.get(rate.id) ?? rate
+          : rate,
+      ),
     });
-  }, [commit, draft]);
+  }, [commit, draft, visibleFilter]);
 
   const fieldError = (path: string) =>
     errors[path] ? labels.invalidValue : undefined;
@@ -299,6 +340,34 @@ export function SharedUserInputsManager({
   const draftBtcPerAi = getDraftBtcPerAi(draft, resolvedBtcPerAi);
 
   let skillIndex = 0;
+  const progressionFields = draft.levels.flatMap((level, index) => {
+    const definition = progressionLevelCatalog.find((item) => item.id === level.id);
+    if (!definition) return [];
+
+    const path = level.id === 'level'
+      ? 'progression.player.level'
+      : `progression.skills.${skillIndex++}.level`;
+    if (!includesField(visibleFilter?.progression, level.id)) return [];
+
+    return [{ level, index, definition, path }];
+  });
+  const hasVisibleEquipment = equipmentFieldIds.some((id) =>
+    includesField(visibleFilter?.equipment, id),
+  );
+  const visiblePrices = draft.prices.flatMap((price, index) =>
+    includesField(visibleFilter?.prices, price.itemId) ? [{ price, index }] : [],
+  );
+  const visibleExchangeRates = draft.exchangeRates.flatMap((rate, index) =>
+    includesField(visibleFilter?.exchangeRates, rate.id) ? [{ rate, index }] : [],
+  );
+  const visibleCacheRates = draft.cacheRates.flatMap((rate, index) =>
+    includesField(visibleFilter?.cacheRates, rate.id) ? [{ rate, index }] : [],
+  );
+  const hasVisibleSettings = progressionFields.length > 0
+    || hasVisibleEquipment
+    || visiblePrices.length > 0
+    || visibleExchangeRates.length > 0
+    || visibleCacheRates.length > 0;
 
   return (
     <div
@@ -318,16 +387,19 @@ export function SharedUserInputsManager({
         </p>
       ) : null}
 
-      <Section title={labels.progressionTitle}>
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {draft.levels.map((level, index) => {
-            const definition = progressionLevelCatalog.find((item) => item.id === level.id);
-            if (!definition) return null;
+      {!hasVisibleSettings && emptyMessage ? (
+        <p
+          role="status"
+          className="rounded-[var(--cco-card-radius)] border border-border bg-muted/30 p-4 text-sm leading-6 text-muted-foreground"
+        >
+          {emptyMessage}
+        </p>
+      ) : null}
 
-            const isPlayerLevel = level.id === 'level';
-            const path = isPlayerLevel
-              ? 'progression.player.level'
-              : `progression.skills.${skillIndex++}.level`;
+      {progressionFields.length > 0 ? (
+        <Section title={labels.progressionTitle}>
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {progressionFields.map(({ level, index, definition, path }) => {
             const id = fieldId(`shared-level-${level.id}`);
             const maximum = getSharedLevelInputMaximum(draft, level.id);
             const range = formatTemplate(labels.rangeHint, {
@@ -367,12 +439,14 @@ export function SharedUserInputsManager({
                 />
               </Field>
             );
-          })}
-        </div>
-      </Section>
+            })}
+          </div>
+        </Section>
+      ) : null}
 
-      <Section title={labels.equipmentTitle}>
+      {hasVisibleEquipment ? <Section title={labels.equipmentTitle}>
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {includesField(visibleFilter?.equipment, 'bargainPercent') ? (
           <Field
             id={fieldId('shared-equipment-bargain-percent')}
             label={labels.bargainPercent}
@@ -404,7 +478,9 @@ export function SharedUserInputsManager({
               )}
             />
           </Field>
+          ) : null}
 
+          {includesField(visibleFilter?.equipment, 'maxHealth') ? (
           <Field
             id={fieldId('shared-equipment-max-health')}
             label={labels.maxHealth}
@@ -432,7 +508,9 @@ export function SharedUserInputsManager({
               )}
             />
           </Field>
+          ) : null}
 
+          {includesField(visibleFilter?.equipment, 'armor') ? (
           <Field
             id={fieldId('shared-equipment-armor')}
             label={labels.armor}
@@ -460,7 +538,9 @@ export function SharedUserInputsManager({
               )}
             />
           </Field>
+          ) : null}
 
+          {includesField(visibleFilter?.equipment, 'destructiveWeaponDamage') ? (
           <Field
             id={fieldId('shared-equipment-destructive-weapon-damage')}
             label={labels.destructiveWeaponDamage}
@@ -491,7 +571,9 @@ export function SharedUserInputsManager({
               )}
             />
           </Field>
+          ) : null}
 
+          {includesField(visibleFilter?.equipment, 'criticalDamagePercent') ? (
           <Field
             id={fieldId('shared-equipment-critical-damage-percent')}
             label={labels.criticalDamagePercent}
@@ -526,7 +608,9 @@ export function SharedUserInputsManager({
               )}
             />
           </Field>
+          ) : null}
 
+          {includesField(visibleFilter?.equipment, 'damageReductionPercent') ? (
           <Field
             id={fieldId('shared-equipment-damage-reduction-percent')}
             label={labels.damageReductionPercent}
@@ -558,12 +642,14 @@ export function SharedUserInputsManager({
               )}
             />
           </Field>
+          ) : null}
         </div>
-      </Section>
+      </Section> : null}
 
+      {visiblePrices.length + visibleExchangeRates.length + visibleCacheRates.length > 0 ? (
       <Section title={labels.economyTitle}>
         <div className="space-y-8">
-          <div className="space-y-4">
+          {visiblePrices.length > 0 ? <div className="space-y-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
                 <h3 className="text-base font-semibold text-foreground">
@@ -588,12 +674,18 @@ export function SharedUserInputsManager({
                       aria-pressed={marketPriceDisplayCurrency === currency}
                       onClick={() => setMarketPriceDisplayCurrency(currency)}
                       data-testid={`shared-market-price-currency-${currency}`}
+                      className="min-w-0 whitespace-normal break-words text-center"
                     >
                       {getEconomyCurrencyDefinition(currency).labels[locale]}
                     </Button>
                   ))}
                 </div>
-                <Button type="button" variant="outline" onClick={restoreDefaultPrices}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-auto min-h-11 whitespace-normal py-2 text-center"
+                  onClick={restoreDefaultPrices}
+                >
                   <RotateCcw aria-hidden="true" />
                   {labels.restorePrices}
                 </Button>
@@ -601,7 +693,7 @@ export function SharedUserInputsManager({
             </div>
             <div className="grid gap-5 sm:grid-cols-2">
               {/* 價格 input 只顯示換算值；draft 仍保留各項原始基準貨幣與數值。 */}
-              {draft.prices.map((price, index) => {
+              {visiblePrices.map(({ price, index }) => {
                 const definition = marketPriceCatalog.find(
                   (item) => item.itemId === price.itemId,
                 );
@@ -656,15 +748,15 @@ export function SharedUserInputsManager({
                 );
               })}
             </div>
-          </div>
+          </div> : null}
 
-          {economyDataSet.payload.exchangeRates.length > 0 ? (
+          {economyDataSet.payload.exchangeRates.length > 0 && visibleExchangeRates.length > 0 ? (
             <div className="space-y-4">
               <h3 className="text-base font-semibold text-foreground">
                 {labels.exchangeRatesTitle}
               </h3>
               <div className="grid gap-5 sm:grid-cols-2">
-                {draft.exchangeRates.map((rate, index) => {
+                {visibleExchangeRates.map(({ rate, index }) => {
                   const definition = economyDataSet.payload.exchangeRates.find(
                     (item) => item.id === rate.id,
                   );
@@ -714,13 +806,13 @@ export function SharedUserInputsManager({
             </div>
           ) : null}
 
-          {mode === 'full' && marketCacheRateCatalog.length > 0 ? (
+          {marketCacheRateCatalog.length > 0 && visibleCacheRates.length > 0 ? (
             <div className="space-y-4">
               <h3 className="text-base font-semibold text-foreground">
                 {labels.cacheRatesTitle}
               </h3>
               <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-                {draft.cacheRates.map((rate, index) => {
+                {visibleCacheRates.map(({ rate, index }) => {
                   const definition = marketCacheRateCatalog.find(
                     (item) => item.id === rate.id,
                   );
@@ -765,6 +857,7 @@ export function SharedUserInputsManager({
           ) : null}
         </div>
       </Section>
+      ) : null}
 
       {mode === 'full' ? (
         <Card className="border-destructive/30">

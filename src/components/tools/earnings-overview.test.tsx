@@ -27,7 +27,7 @@ import {
 } from './mixed-crushing-labels';
 import {
   calculateEarningsOverviewTool,
-  applyEarningsOverviewSharedValues,
+  applyEarningsOverviewPlayerValues,
   EarningsOverviewCalculator,
   EarningsOverviewResultTable,
   EarningsOverviewToolProvider,
@@ -96,7 +96,7 @@ async function mountInteractiveOverview() {
     await Promise.resolve();
   });
 
-  return container;
+  return { container, store };
 }
 
 function createTrackedRoot() {
@@ -233,15 +233,20 @@ describe('Earnings overview calculator', () => {
     expect(markup).toContain('id="earnings-overview-search-level"');
     expect(markup).toContain('id="earnings-overview-printing-level"');
     expect(markup).toContain('id="earnings-overview-mining-level"');
-    expect(markup).toContain('id="earnings-overview-bargain-percent"');
-    expect(markup).toContain('id="earnings-overview-btc-buff-percent"');
-    expect(markup).toContain('aria-valuenow="100"');
+    expect(markup).toContain('data-tool-reset=""');
+    expect(markup).toContain('帶入玩家等級');
     expect(markup).toContain('id="earnings-overview-comparison-mode"');
     expect(markup).toContain('比較方式');
     expect(markup).toContain('15 分鐘飛逝');
     expect(markup).toContain('data-result-layout="table"');
     expect(markup).toContain('data-earnings-overview-table="true"');
     expect(markup).toContain('data-comparison-mode="per-minute"');
+    expect(markup).toContain('id="earnings-overview-bargain-percent"');
+    expect(markup).toContain('id="earnings-overview-btc-buff-percent"');
+    expect(markup).toMatch(/for="earnings-overview-bargain-percent">[\s\S]*?討價還價[\s\S]*?共用/);
+    expect(markup).toMatch(/id="earnings-overview-bargain-percent-range"[^>]*>0–40<\/span>/);
+    expect(markup).toMatch(/id="earnings-overview-bargain-percent-unit"[^>]*>%<\/span>/);
+    expect(markup).toContain('>共用</span>');
     expect(markup).toContain('data-earnings-chart="true"');
     expect(markup).toContain('min-w-[40rem]');
     expect(markup).toContain('<col class="w-[31%]"/>');
@@ -258,8 +263,33 @@ describe('Earnings overview calculator', () => {
     expect(markup.match(/data-mixed-crushing-slider=/g)).toHaveLength(3);
     expect(markup).toContain('推薦組合');
     expect(markup).toContain('活動收益');
-    expect(markup).toContain('從共用設定填入');
-    expect(markup).not.toContain('重設本工具');
+    expect(markup).not.toContain('從共用設定填入');
+    expect(markup).toContain('重設本工具');
+  });
+
+  it('共用折扣與 BTC BUFF 回到主要輸入，保持等級／比較方式順序', () => {
+    const labels = getMessages('zh-tw').tools.earningsOverview;
+    const markup = renderEarningsOverview(
+      <EarningsOverviewCalculator
+        labels={labels}
+        locale="zh-tw"
+        closeLabel={getMessages('zh-tw').context.closePanel}
+      />,
+    );
+
+    const fields = [
+      'earnings-overview-search-level',
+      'earnings-overview-printing-level',
+      'earnings-overview-mining-level',
+      'earnings-overview-bargain-percent',
+      'earnings-overview-btc-buff-percent',
+      'earnings-overview-comparison-mode',
+    ].map((id) => markup.indexOf(`id="${id}"`));
+    expect(fields.every((position, index) =>
+      position >= 0 && (index === 0 || position > fields[index - 1]),
+    )).toBe(true);
+    expect(markup).toContain('aria-valuenow="100"');
+    expect(markup).not.toContain('earnings-overview-settings');
   });
 
   it('由穩定設定 ID 投影共用等級，但不讀取 Shared Buff', () => {
@@ -287,26 +317,29 @@ describe('Earnings overview calculator', () => {
     });
   });
 
-  it('缺少 Buff 欄位時預設 100，既有值保留且填入共用設定不覆蓋 Buff', () => {
+  it('遷移舊共用折扣欄位，且帶入玩家等級不覆寫本工具 BUFF', () => {
     const missingBuff = {
       searchLevel: '1',
       printingLevel: '1',
       miningLevel: '1',
-      bargainPercent: '0',
     };
     expect(normalizeEarningsOverviewToolState(missingBuff)).toMatchObject({
       ...missingBuff,
       btcBuffPercent: '100',
       comparisonMode: 'per-minute',
     });
-    expect(normalizeEarningsOverviewToolState({ ...missingBuff, btcBuffPercent: '100' }))
-      .toMatchObject({ btcBuffPercent: '100' });
 
     const current = normalizeEarningsOverviewToolState({
       ...missingBuff,
       btcBuffPercent: '40',
     })!;
-    expect(applyEarningsOverviewSharedValues(
+    const migratedLegacy = normalizeEarningsOverviewToolState({
+      ...missingBuff,
+      bargainPercent: '35',
+      btcBuffPercent: '80',
+    })!;
+    expect(migratedLegacy).not.toHaveProperty('bargainPercent');
+    expect(applyEarningsOverviewPlayerValues(
       current,
       selectEarningsOverviewSharedValues(defaultSharedUserInputs),
     ).btcBuffPercent).toBe('40');
@@ -337,7 +370,10 @@ describe('Earnings overview calculator', () => {
     const originalValues = { ...legacyValues };
 
     expect(normalizeEarningsOverviewToolState(legacyValues)).toEqual({
-      ...legacyValues,
+      searchLevel: '500',
+      printingLevel: '450',
+      miningLevel: '420',
+      btcBuffPercent: '80',
       comparisonMode: 'per-minute',
       mixedCrushingMode: 'recommended',
       mixedMedicalCount: '0',
@@ -744,7 +780,6 @@ describe('Earnings overview calculator', () => {
       searchLevel: '1',
       printingLevel: '1',
       miningLevel: '1',
-      bargainPercent: '0',
       btcBuffPercent: '100',
       comparisonMode: 'per-minute' as const,
       mixedCrushingMode: 'manual' as const,
@@ -835,7 +870,7 @@ describe('Earnings overview calculator', () => {
   });
 
   it('有效手動組合切換到 30／15 分鐘時重設推薦並同步總覽、控制與固定圖表', async () => {
-    const container = await mountInteractiveOverview();
+    const { container } = await mountInteractiveOverview();
     await activateFixedChart(container);
 
     await setMixedCount(container, 'medical', '12');
@@ -875,7 +910,7 @@ describe('Earnings overview calculator', () => {
   });
 
   it('切換到 105 分鐘或每分鐘會清除無效草稿與錯誤並顯示該模式推薦', async () => {
-    const container = await mountInteractiveOverview();
+    const { container } = await mountInteractiveOverview();
     await activateFixedChart(container);
 
     await setMixedCount(container, 'medical', '2.5');
@@ -900,7 +935,7 @@ describe('Earnings overview calculator', () => {
   });
 
   it('重選相同比較方式不清除手動草稿或覆寫已保存的組合', async () => {
-    const container = await mountInteractiveOverview();
+    const { container } = await mountInteractiveOverview();
     await setMixedCount(container, 'medical', '27');
 
     await act(async () => {
@@ -925,6 +960,97 @@ describe('Earnings overview calculator', () => {
         mixedCrushingMode: 'manual',
         mixedMedicalCount: '27',
       });
+  });
+
+  it('重設重載最新玩家等級並還原 BUFF／模式，但不改共用資料', async () => {
+    const { container, store } = await mountInteractiveOverview();
+    const labels = getMessages('zh-tw').tools.earningsOverview;
+
+    await setNumberInputValue(
+      container.querySelector<HTMLInputElement>('#earnings-overview-search-level')!,
+      '333',
+    );
+    await setComparisonMode(container, 'elapsed-30');
+    await setMixedCount(container, 'medical', '4');
+    await setNumberInputValue(
+      container.querySelector<HTMLInputElement>(
+        '#earnings-overview-btc-buff-percent',
+      )!,
+      '2',
+    );
+    const bargainInput = container.querySelector<HTMLInputElement>(
+      '#earnings-overview-bargain-percent',
+    )!;
+    await setNumberInputValue(bargainInput, '30');
+    expect(store.getSnapshot().equipment.bargainPercent).toBe(30);
+    const sharedBeforeInvalidBargain = store.getSnapshot();
+    await setNumberInputValue(bargainInput, '41');
+    expect(store.getSnapshot()).toEqual(sharedBeforeInvalidBargain);
+    expect(bargainInput.getAttribute('aria-invalid')).toBe('true');
+    await setNumberInputValue(bargainInput, '30');
+
+    await act(async () => {
+      store.update((current) => ({
+        ...current,
+        progression: {
+          ...current.progression,
+          player: { ...current.progression.player, level: 500 },
+          skills: [
+            ...current.progression.skills.filter((skill) =>
+              skill.id !== 'printing-rank' && skill.id !== 'mining-skill',
+            ),
+            { id: 'printing-rank', level: 450 },
+            { id: 'mining-skill', level: 420 },
+          ],
+        },
+        equipment: { ...current.equipment, bargainPercent: 35 },
+      }));
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector<HTMLInputElement>(
+      '#earnings-overview-search-level',
+    )?.value).toBe('333');
+    const sharedBeforeReset = store.getSnapshot();
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[data-tool-reset=""]')?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector<HTMLInputElement>(
+      '#earnings-overview-search-level',
+    )?.value).toBe('500');
+    expect(container.querySelector<HTMLInputElement>(
+      '#earnings-overview-printing-level',
+    )?.value).toBe('450');
+    expect(container.querySelector<HTMLInputElement>(
+      '#earnings-overview-mining-level',
+    )?.value).toBe('420');
+    expect(container.querySelector<HTMLSelectElement>(
+      '#earnings-overview-comparison-mode',
+    )?.value).toBe('per-minute');
+    expect(container.querySelector('[data-mixed-crushing-controls]')
+      ?.getAttribute('data-mixed-crushing-mode')).toBe('recommended');
+    expect(container.querySelector<HTMLInputElement>(
+      '#earnings-overview-btc-buff-percent',
+    )?.getAttribute('aria-valuenow')).toBe('100');
+    expect(loadToolState('earnings-overview', { storage: window.localStorage })).toMatchObject({
+      searchLevel: '500',
+      printingLevel: '450',
+      miningLevel: '420',
+      btcBuffPercent: '100',
+      comparisonMode: 'per-minute',
+      mixedCrushingMode: 'recommended',
+      mixedMedicalCount: '0',
+      mixedAmmunitionCount: '0',
+      mixedMilitaryCount: '0',
+    });
+    expect(loadToolState('earnings-overview', { storage: window.localStorage }))
+      .not.toHaveProperty('bargainPercent');
+    expect(store.getSnapshot()).toEqual(sharedBeforeReset);
+    expect(labels.reset).toBe('重設本工具');
   });
 
   it('三語系都提供比較方式與飛逝選項文案', () => {

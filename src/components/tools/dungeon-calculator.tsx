@@ -6,7 +6,6 @@ import {
   useContext,
   useMemo,
 } from 'react';
-import { Download, RotateCcw } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import type { ContextualDocsPageProps } from '@/components/context';
@@ -20,8 +19,9 @@ import {
   ToolField,
   ToolInputField,
   ToolPage,
-  ToolPresetButton,
+  ToolPrimaryActions,
   ToolResultCard,
+  ToolSharedNumberField,
   ToolState,
   ToolValidationSummary,
 } from '@/components/tools';
@@ -53,49 +53,30 @@ import { createNumberFormatter, type NumberFormatter } from '@/lib/number-format
 import { SHARED_DESTRUCTIVE_WEAPON_DAMAGE_DEFAULT } from '@/lib/shared-user-inputs';
 import {
   clearToolState,
-  defaultSharedUserInputs,
   type SharedUserInputs,
 } from '@/lib/storage';
 import { useToolStateStorage } from '@/lib/storage/use-tool-state';
+import { updateSharedEquipmentNumber, type SharedEquipmentNumberField } from './shared-input-updates';
+import { getSharedFieldPresentation } from './shared-field-presentation';
 
 export interface DungeonToolLabels {
-  readonly settingsTab: string;
-  readonly settingsTitle: string;
-  readonly openSettings: string;
-  readonly closeSettings: string;
   readonly inputs: string;
   readonly enemyLevel: string;
   readonly dungeonType: string;
   readonly types: Readonly<Record<DungeonType, string>>;
   readonly levelUnit: string;
-  readonly playerValues: string;
-  readonly maxHealth: string;
-  readonly shield: string;
-  readonly destructiveWeaponDamage: string;
-  readonly criticalDamagePercent: string;
-  readonly damageReductionPercent: string;
-  readonly healthUnit: string;
-  readonly shieldUnit: string;
-  readonly damageUnit: string;
-  readonly percentUnit: string;
   readonly levelRange: string;
-  readonly nonNegativeRange: string;
-  readonly positiveRange: string;
-  readonly criticalDamageRange: string;
-  readonly percentRange: string;
-  readonly fillShared: string;
   readonly reset: string;
   readonly validationSummary: string;
   readonly validationLevel: string;
   readonly validationType: string;
-  readonly validationValue: string;
-  readonly validationCriticalDamage: string;
   readonly noResult: string;
   readonly noResultHint: string;
   readonly summary: string;
   readonly safety: string;
   readonly roomLevels: string;
   readonly none: string;
+  readonly shield: string;
   readonly maxSafeEnemyLevel: string;
   readonly maxSafeRoomLevel: string;
   readonly playerEffectiveHealth: string;
@@ -142,47 +123,43 @@ export interface DungeonSharedValues {
   readonly damageReductionPercent: string;
 }
 
-type DungeonToolState = DungeonFormValues;
+type DungeonSharedEquipmentValues = Pick<
+  SharedUserInputs['equipment'],
+  | 'maxHealth'
+  | 'armor'
+  | 'destructiveWeaponDamage'
+  | 'criticalDamagePercent'
+  | 'damageReductionPercent'
+>;
+
+type DungeonToolState = Pick<DungeonFormValues, 'enemyLevel' | 'dungeonType'>;
+type DungeonScenarioField = keyof DungeonToolState;
 
 const defaultDungeonToolState: DungeonToolState = {
   enemyLevel: String(DUNGEON_DEFAULT_LEVEL),
   dungeonType: 'normal',
-  maxHealth: '0',
-  shield: '0',
-  destructiveWeaponDamage: String(SHARED_DESTRUCTIVE_WEAPON_DAMAGE_DEFAULT),
-  criticalDamagePercent: String(DUNGEON_CRITICAL_DAMAGE_MIN),
-  damageReductionPercent: '0',
 };
-
-const dungeonNumericFields = [
-  'enemyLevel',
-  'maxHealth',
-  'shield',
-  'destructiveWeaponDamage',
-  'criticalDamagePercent',
-  'damageReductionPercent',
-] as const satisfies readonly Exclude<DungeonField, 'dungeonType'>[];
 
 function isDungeonType(value: string): value is DungeonType {
   return value === 'normal' || value === 'invasion';
 }
 
-/** 將共用裝備／戰鬥輸入投影成地城工具可一次帶入的欄位。 */
+/** 將共用裝備／戰鬥輸入投影成地城公式欄位，不存入地城本機狀態。 */
 export function selectDungeonSharedValues(
-  snapshot: SharedUserInputs,
+  equipment: DungeonSharedEquipmentValues,
 ): DungeonSharedValues {
   const criticalDamagePercent =
-    snapshot.equipment.criticalDamagePercent ?? DUNGEON_CRITICAL_DAMAGE_MIN;
+    equipment.criticalDamagePercent ?? DUNGEON_CRITICAL_DAMAGE_MIN;
 
   return {
-    maxHealth: String(snapshot.equipment.maxHealth ?? 0),
-    shield: String(snapshot.equipment.armor ?? 0),
+    maxHealth: String(equipment.maxHealth ?? 0),
+    shield: String(equipment.armor ?? 0),
     destructiveWeaponDamage: String(
-      snapshot.equipment.destructiveWeaponDamage
+      equipment.destructiveWeaponDamage
         ?? SHARED_DESTRUCTIVE_WEAPON_DAMAGE_DEFAULT,
     ),
     criticalDamagePercent: String(criticalDamagePercent),
-    damageReductionPercent: String(snapshot.equipment.damageReductionPercent ?? 0),
+    damageReductionPercent: String(equipment.damageReductionPercent ?? 0),
   };
 }
 
@@ -190,27 +167,26 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-function isDungeonToolState(value: unknown): value is DungeonToolState {
-  if (!isRecord(value)) return false;
-
+export function normalizeDungeonToolState(value: unknown): DungeonToolState | undefined {
   if (
-    dungeonNumericFields.some((field) => typeof value[field] !== 'string') ||
+    !isRecord(value) ||
+    typeof value.enemyLevel !== 'string' ||
     typeof value.dungeonType !== 'string' ||
     !isDungeonType(value.dungeonType)
   ) {
-    return false;
+    return undefined;
   }
 
-  const keys = Object.keys(value);
-  return keys.length === 7 && keys.every((key) =>
-    key === 'enemyLevel' ||
-    key === 'dungeonType' ||
-    key === 'maxHealth' ||
-    key === 'shield' ||
-    key === 'destructiveWeaponDamage' ||
-    key === 'criticalDamagePercent' ||
-    key === 'damageReductionPercent',
-  );
+  // 舊版狀態同時保存裝備覆寫；只遷移本工具情境，裝備一律改讀共用設定。
+  return {
+    enemyLevel: value.enemyLevel,
+    dungeonType: value.dungeonType,
+  };
+}
+
+function isDungeonToolState(value: unknown): value is DungeonToolState {
+  if (!isRecord(value) || Object.keys(value).length !== 2) return false;
+  return normalizeDungeonToolState(value) !== undefined;
 }
 
 function parseInteger(value: string, min: number, max: number): number | null {
@@ -298,8 +274,7 @@ interface DungeonToolContextValue {
   readonly errors: DungeonErrors;
   readonly inputs: DungeonCalculationInput | null;
   readonly result: DungeonCalculation | null;
-  readonly setValue: (field: DungeonField, value: string) => void;
-  readonly fillFromShared: () => void;
+  readonly setValue: (field: DungeonScenarioField, value: string) => void;
   readonly reset: () => void;
 }
 
@@ -316,50 +291,62 @@ function useDungeonTool() {
 
 export function DungeonToolProvider({ children }: { children: ReactNode }) {
   const sharedSnapshot = useSharedUserInputs();
-  const sharedStore = useSharedUserInputsStore();
+  const {
+    maxHealth: sharedMaxHealth,
+    armor: sharedArmor,
+    destructiveWeaponDamage: sharedWeaponDamage,
+    criticalDamagePercent: sharedCriticalDamagePercent,
+    damageReductionPercent: sharedDamageReductionPercent,
+  } = sharedSnapshot.equipment;
+  const sharedValues = useMemo(
+    () => selectDungeonSharedValues({
+      maxHealth: sharedMaxHealth,
+      armor: sharedArmor,
+      destructiveWeaponDamage: sharedWeaponDamage,
+      criticalDamagePercent: sharedCriticalDamagePercent,
+      damageReductionPercent: sharedDamageReductionPercent,
+    }),
+    [
+      sharedMaxHealth,
+      sharedArmor,
+      sharedWeaponDamage,
+      sharedCriticalDamagePercent,
+      sharedDamageReductionPercent,
+    ],
+  );
   const [toolState, setToolState] = useToolStateStorage<DungeonToolState>(
     'dungeon',
     defaultDungeonToolState,
     {
       validate: isDungeonToolState,
-      initialize: () => ({
-        ...defaultDungeonToolState,
-        ...selectDungeonSharedValues(sharedStore.getSnapshot()),
-      }),
+      normalize: normalizeDungeonToolState,
     },
   );
 
-  const setValue = useCallback((field: DungeonField, value: string) => {
+  const setValue = useCallback((field: DungeonScenarioField, value: string) => {
     setToolState((current) => ({ ...current, [field]: value }));
   }, [setToolState]);
 
-  const fillFromShared = useCallback(() => {
-    setToolState((current) => ({
-      ...current,
-      ...selectDungeonSharedValues(sharedStore.getSnapshot()),
-    }));
-  }, [setToolState, sharedStore]);
-
   const reset = useCallback(() => {
     clearToolState('dungeon');
-    setToolState({
-      ...defaultDungeonToolState,
-      ...selectDungeonSharedValues(sharedStore.getSnapshot()),
-    });
-  }, [setToolState, sharedStore]);
+    setToolState(defaultDungeonToolState);
+  }, [setToolState]);
 
-  const calculation = useMemo(() => calculateDungeonTool(toolState), [toolState]);
+  const values = useMemo(
+    () => ({ ...sharedValues, ...toolState }),
+    [sharedValues, toolState],
+  );
+  const calculation = useMemo(() => calculateDungeonTool(values), [values]);
   const contextValue = useMemo(
     () => ({
-      values: toolState,
+      values,
       errors: calculation.errors,
       inputs: calculation.inputs,
       result: calculation.result,
       setValue,
-      fillFromShared,
       reset,
     }),
-    [calculation, fillFromShared, reset, setValue, toolState],
+    [calculation, reset, setValue, values],
   );
 
   return (
@@ -370,53 +357,37 @@ export function DungeonToolProvider({ children }: { children: ReactNode }) {
 }
 
 function getErrorMessage(
-  field: DungeonField,
+  field: DungeonScenarioField,
   errors: DungeonErrors,
   labels: DungeonToolLabels,
 ) {
   const error = errors[field];
   if (error === 'level') return labels.validationLevel;
   if (error === 'type') return labels.validationType;
-  if (error === 'criticalDamage') return labels.validationCriticalDamage;
-  if (error === 'value') return labels.validationValue;
   return undefined;
 }
 
-function DungeonNumberField({
-  field,
-  id,
-  label,
-  unit,
-  min,
-  max,
-  range,
+function DungeonLevelField({
   labels,
 }: {
-  field: Exclude<DungeonField, 'dungeonType'>;
-  id: string;
-  label: string;
-  unit?: string;
-  min: number;
-  max?: number;
-  range: string;
   labels: DungeonToolLabels;
 }) {
   const { values, errors, setValue } = useDungeonTool();
 
   return (
     <ToolInputField
-      id={id}
-      label={label}
+      id="dungeon-enemy-level"
+      label={labels.enemyLevel}
       type="number"
       inputMode="numeric"
-      min={min}
-      max={max}
+      min={DUNGEON_LEVEL_MIN}
+      max={DUNGEON_LEVEL_MAX}
       step="1"
-      value={values[field]}
-      onChange={(event) => setValue(field, event.target.value)}
-      error={getErrorMessage(field, errors, labels)}
-      range={range}
-      unit={unit}
+      value={values.enemyLevel}
+      onChange={(event) => setValue('enemyLevel', event.target.value)}
+      error={getErrorMessage('enemyLevel', errors, labels)}
+      range={labels.levelRange}
+      unit={labels.levelUnit}
     />
   );
 }
@@ -452,46 +423,48 @@ function DungeonTypeField({
   );
 }
 
-export function DungeonSettingsPanel({
-  labels,
-  idPrefix = 'dungeon-settings',
+function DungeonSharedNumberField({
+  id,
+  formField,
+  sharedField,
+  label,
+  unit,
+  min,
+  max,
+  range,
+  sharedLabel,
+  invalidValueMessage,
 }: {
-  labels: DungeonToolLabels;
-  idPrefix?: string;
+  id: string;
+  formField: keyof DungeonSharedValues;
+  sharedField: SharedEquipmentNumberField;
+  label: string;
+  unit: string;
+  min: number;
+  max?: number;
+  range: string;
+  sharedLabel: string;
+  invalidValueMessage: string;
 }) {
-  const { reset } = useDungeonTool();
+  const { values } = useDungeonTool();
+  const store = useSharedUserInputsStore();
 
   return (
-    <div className="flex h-full flex-col gap-6 p-4">
-      <div>
-        <h2 className="font-semibold text-foreground">{labels.settingsTitle}</h2>
-      </div>
-
-      <div className="space-y-5">
-        <h3 className="text-sm font-medium text-foreground">{labels.playerValues}</h3>
-        <DungeonNumberField
-          field="damageReductionPercent"
-          id={`${idPrefix}-damage-reduction-percent`}
-          label={labels.damageReductionPercent}
-          unit={labels.percentUnit}
-          min={0}
-          max={100}
-          range={labels.percentRange}
-          labels={labels}
-        />
-      </div>
-
-      <div className="mt-auto border-t border-border pt-4">
-        <ToolPresetButton
-          type="button"
-          variant="outline"
-          className="w-full"
-          onClick={reset}
-          icon={<RotateCcw aria-hidden="true" />}
-          label={labels.reset}
-        />
-      </div>
-    </div>
+    <ToolSharedNumberField
+      id={id}
+      label={label}
+      sharedLabel={sharedLabel}
+      value={values[formField]}
+      min={min}
+      max={max}
+      integer
+      unit={unit}
+      range={range}
+      invalidValueMessage={invalidValueMessage}
+      onValueChange={(value) => store.update((current) =>
+        updateSharedEquipmentNumber(current, sharedField, value),
+      )}
+    />
   );
 }
 
@@ -802,7 +775,8 @@ export function DungeonCalculator({
   locale: Locale;
   numberFormatter?: NumberFormatter;
 }) {
-  const { errors, result, fillFromShared } = useDungeonTool();
+  const { errors, result, reset } = useDungeonTool();
+  const sharedFields = getSharedFieldPresentation(locale);
   const hasErrors = Object.keys(errors).length > 0;
   const formatNumber = useMemo(
     () => numberFormatter ?? createNumberFormatter(locale),
@@ -817,65 +791,63 @@ export function DungeonCalculator({
             <div>
               <CardTitle className="site-tool-section-heading">{labels.inputs}</CardTitle>
             </div>
-            <ToolPresetButton
-              type="button"
-              variant="outline"
-              onClick={fillFromShared}
-              icon={<Download aria-hidden="true" />}
-              label={labels.fillShared}
+            <ToolPrimaryActions
+              onReset={reset}
+              resetLabel={labels.reset}
             />
           </div>
         </CardHeader>
         <CardContent className="space-y-8">
           <div className="@container">
             <div className="grid gap-5 @min-[24rem]:grid-cols-2">
-              <DungeonNumberField
-                field="enemyLevel"
-                id="dungeon-enemy-level"
-                label={labels.enemyLevel}
-                unit={labels.levelUnit}
-                min={DUNGEON_LEVEL_MIN}
-                max={DUNGEON_LEVEL_MAX}
-                range={labels.levelRange}
-                labels={labels}
-              />
+              <DungeonLevelField labels={labels} />
               <DungeonTypeField id="dungeon-type" labels={labels} />
-              <DungeonNumberField
-                field="maxHealth"
+              <DungeonSharedNumberField
+                formField="maxHealth"
+                sharedField="maxHealth"
                 id="dungeon-max-health"
-                label={labels.maxHealth}
-                unit={labels.healthUnit}
+                {...sharedFields.equipment.maxHealth}
                 min={0}
-                range={labels.nonNegativeRange}
-                labels={labels}
+                sharedLabel={sharedFields.sharedLabel}
+                invalidValueMessage={sharedFields.invalidValueMessage}
               />
-              <DungeonNumberField
-                field="shield"
+              <DungeonSharedNumberField
+                formField="shield"
+                sharedField="armor"
                 id="dungeon-shield"
-                label={labels.shield}
-                unit={labels.shieldUnit}
+                {...sharedFields.equipment.armor}
                 min={0}
-                range={labels.nonNegativeRange}
-                labels={labels}
+                sharedLabel={sharedFields.sharedLabel}
+                invalidValueMessage={sharedFields.invalidValueMessage}
               />
-              <DungeonNumberField
-                field="destructiveWeaponDamage"
+              <DungeonSharedNumberField
+                formField="destructiveWeaponDamage"
+                sharedField="destructiveWeaponDamage"
                 id="dungeon-destructive-weapon-damage"
-                label={labels.destructiveWeaponDamage}
-                unit={labels.damageUnit}
+                {...sharedFields.equipment.destructiveWeaponDamage}
                 min={1}
-                range={labels.positiveRange}
-                labels={labels}
+                sharedLabel={sharedFields.sharedLabel}
+                invalidValueMessage={sharedFields.invalidValueMessage}
               />
-              <DungeonNumberField
-                field="criticalDamagePercent"
+              <DungeonSharedNumberField
+                formField="criticalDamagePercent"
+                sharedField="criticalDamagePercent"
                 id="dungeon-critical-damage-percent"
-                label={labels.criticalDamagePercent}
-                unit={labels.percentUnit}
+                {...sharedFields.equipment.criticalDamagePercent}
                 min={DUNGEON_CRITICAL_DAMAGE_MIN}
                 max={DUNGEON_CRITICAL_DAMAGE_MAX}
-                range={labels.criticalDamageRange}
-                labels={labels}
+                sharedLabel={sharedFields.sharedLabel}
+                invalidValueMessage={sharedFields.invalidValueMessage}
+              />
+              <DungeonSharedNumberField
+                formField="damageReductionPercent"
+                sharedField="damageReductionPercent"
+                id="dungeon-damage-reduction-percent"
+                {...sharedFields.equipment.damageReductionPercent}
+                min={0}
+                max={100}
+                sharedLabel={sharedFields.sharedLabel}
+                invalidValueMessage={sharedFields.invalidValueMessage}
               />
             </div>
           </div>
@@ -905,12 +877,10 @@ export function DungeonToolPage({
   contextLabel,
   contextPanelLabel,
   contextCloseLabel,
-  labels,
   header,
   headerActions,
   children,
 }: Omit<ContextualDocsPageProps, 'contextItems' | 'defaultContextId' | 'mobileContext' | 'children'> & {
-  labels: DungeonToolLabels;
   header: ReactNode;
   headerActions?: ReactNode;
   children: ReactNode;
@@ -925,17 +895,6 @@ export function DungeonToolPage({
         contextCloseLabel={contextCloseLabel}
         header={header}
         headerActions={headerActions}
-        settings={{
-          id: 'settings',
-          label: labels.settingsTab,
-          title: labels.settingsTitle,
-          openLabel: labels.openSettings,
-          closeLabel: labels.closeSettings,
-          idPrefix: 'dungeon-settings',
-          render: ({ idPrefix }) => (
-            <DungeonSettingsPanel labels={labels} idPrefix={idPrefix} />
-          ),
-        }}
       >
         {children}
       </ToolPage>

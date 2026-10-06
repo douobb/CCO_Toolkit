@@ -13,14 +13,12 @@ import { getMessages } from '@/lib/translations';
 
 import {
   calculateMiningTool,
-  applyMiningSharedValues,
+  applyMiningPlayerValues,
   createMiningValues,
   MiningCalculator,
-  MiningSettingsPanel,
   MiningToolProvider,
   normalizeMiningToolState,
   selectMiningSharedValues,
-  updateMiningSharedValue,
 } from './mining-calculator';
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -65,18 +63,19 @@ async function mountMiningCalculator() {
   const root = createRoot(container);
   mountedMinings.push({ container, root, store });
 
+  const labels = getMessages('en').tools.mining;
   await act(async () => {
     root.render(
       <SharedUserInputsProvider store={store}>
         <MiningToolProvider>
-          <MiningCalculator labels={getMessages('en').tools.mining} locale="en" />
+          <MiningCalculator labels={labels} locale="en" />
         </MiningToolProvider>
       </SharedUserInputsProvider>,
     );
     await Promise.resolve();
   });
 
-  return { container };
+  return { container, store };
 }
 
 function getToggle(container: HTMLElement, card: MiningCardId): HTMLButtonElement {
@@ -165,8 +164,19 @@ describe('Mining calculator presentation', () => {
     expect(markup).toContain('id="mining-hash-price"');
     expect(markup).toContain('id="mining-btc-per-ai"');
     expect(markup).toContain('id="mining-trade-exploit"');
-    expect(markup).toContain('aria-valuenow="100"');
-    expect(markup).toContain('從共用設定填入');
+    expect(markup).toContain('id="mining-cortex-bonus"');
+    expect(markup).toMatch(/for="mining-hash-price">[\s\S]*?Hash 價格[\s\S]*?共用/);
+    expect(markup).toContain('id="mining-hash-price-range"');
+    expect(markup).toMatch(/id="mining-hash-price-unit"[^>]*>AI／hash<\/span>/);
+    expect(markup).toMatch(/for="mining-btc-per-ai">[\s\S]*?AI → BTC[\s\S]*?共用/);
+    expect(markup).not.toContain('AI → BTC 匯率');
+    expect(markup).toContain('id="mining-btc-per-ai-range"');
+    expect(markup).toContain('>大於 0</span>');
+    expect(markup).toMatch(/id="mining-btc-per-ai-unit"[^>]*>BTC\/AI<\/span>/);
+    expect(markup).not.toContain('tech-scrap-price');
+    expect(markup).toContain('data-tool-fill-player=""');
+    expect(markup).toContain('data-tool-reset=""');
+    expect(markup).toContain('帶入玩家等級');
     expect(markup).toContain('BTC 挖礦收益');
     expect(markup).toContain('AI 製作收益');
     expect(markup).toContain('結果拆解');
@@ -183,20 +193,36 @@ describe('Mining calculator presentation', () => {
     expect(markup).not.toContain('資料版本');
   });
 
-  it('設定面板保留次要物價與 BUFF，主要調整值移至主要輸入區', () => {
+  it('HASH 價格與匯率共用標記清楚，兩種本工具 BUFF 都在主要卡片', () => {
     const labels = getMessages('zh-tw').tools.mining;
     const markup = renderMining(
-      <MiningSettingsPanel labels={labels} idPrefix="test-mining-settings" />,
+      <MiningCalculator labels={labels} locale="zh-tw" />,
     );
 
-    expect(markup).toContain('id="test-mining-settings-tech-scrap-price"');
-    expect(markup).toContain('id="test-mining-settings-cortex-bonus"');
-    expect(markup).not.toContain('id="test-mining-settings-hash-price"');
-    expect(markup).not.toContain('id="test-mining-settings-btc-per-ai"');
-    expect(markup).not.toContain('id="test-mining-settings-trade-exploit"');
+    expect(markup).toContain('id="mining-hash-price"');
+    expect(markup).toContain('id="mining-btc-per-ai"');
+    expect(markup).toContain('id="mining-trade-exploit"');
+    expect(markup).toContain('id="mining-cortex-bonus"');
+    expect(markup).toContain('>共用</span>');
+    expect(markup).not.toContain('mining-settings');
     expect(markup).not.toContain('本機瀏覽器');
     expect(markup).not.toContain('沿用共用值');
     expect(markup).not.toContain('本工具覆寫');
+  });
+
+  it('將交易漏洞利用與額葉皮質增強相鄰排列於主要輸入的 BUFF 區', () => {
+    const labels = getMessages('zh-tw').tools.mining;
+    const markup = renderMining(
+      <MiningCalculator labels={labels} locale="zh-tw" />,
+    );
+    const buffHeadingPosition = markup.indexOf(`>${labels.buffs}</h3>`);
+    const tradeExploitPosition = markup.indexOf('id="mining-trade-exploit"');
+    const cortexBonusPosition = markup.indexOf('id="mining-cortex-bonus"');
+
+    expect(buffHeadingPosition).toBeGreaterThanOrEqual(0);
+    expect(tradeExploitPosition).toBeGreaterThan(buffHeadingPosition);
+    expect(cortexBonusPosition).toBeGreaterThan(tradeExploitPosition);
+    expect(markup).toContain('grid gap-5 @min-[24rem]:grid-cols-2');
   });
 
   it('將本工具狀態與價格草稿組合成計算輸入', () => {
@@ -208,6 +234,7 @@ describe('Mining calculator presentation', () => {
           tradeExploitPercent: '100',
         },
         {
+          miningLevel: '1',
           aiPerHash: '2',
           btcPerAi: '8150',
           aiPerThousandTechScrap: '120',
@@ -223,7 +250,7 @@ describe('Mining calculator presentation', () => {
     });
   });
 
-  it('缺少 Buff 欄位時預設 100，既有值保留且填入共用設定不覆蓋 Buff', () => {
+  it('缺少 Buff 欄位時預設 100，帶入玩家等級不覆蓋本工具 Buff', () => {
     const missingBuff = { miningLevel: '1' };
     expect(normalizeMiningToolState(missingBuff)).toMatchObject({
       miningLevel: '1',
@@ -236,7 +263,7 @@ describe('Mining calculator presentation', () => {
       tradeExploitPercent: '100',
     })).toMatchObject({ cortexBonusPercent: '100', tradeExploitPercent: '100' });
 
-    const applied = applyMiningSharedValues(
+    const applied = applyMiningPlayerValues(
       { ...missingBuff, cortexBonusPercent: '40', tradeExploitPercent: '80' },
       selectMiningSharedValues(defaultSharedUserInputs),
     );
@@ -275,30 +302,71 @@ describe('Mining calculator presentation', () => {
     });
   });
 
-  it('將有效價格與匯率修改回寫共用庫，回到預設值時移除覆寫', () => {
-    const withHashOverride = updateMiningSharedValue(
-      defaultSharedUserInputs,
-      'aiPerHash',
-      2,
-    );
-    expect(withHashOverride.economy.prices).toEqual([
-      { itemId: 'hash', currencyId: 'ai', amount: 2 },
+  it('共用物價與匯率更新即時計算，但不覆蓋本地試算等級', async () => {
+    const { container, store } = await mountMiningCalculator();
+    await updateInputs(container, [['mining-level', '400']]);
+    const before = readNetProfitAmount(container, 'btc');
+
+    await act(async () => {
+      store.update((current) => ({
+        ...current,
+        economy: {
+          ...current.economy,
+          prices: [{ itemId: 'hash', currencyId: 'ai', amount: 4 }],
+          exchangeRates: [{ id: 'btc-per-ai', value: 9000 }],
+        },
+      }));
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector<HTMLInputElement>('#mining-level')?.value).toBe('400');
+    expect(readNetProfitAmount(container, 'btc')).not.toBeCloseTo(before, 2);
+  });
+
+  it('帶入玩家與重設只同步試算等級；重設將 BUFF 回滿但不改共享物價匯率', async () => {
+    const { container, store } = await mountMiningCalculator();
+    await updateInputs(container, [
+      ['mining-level', '400'],
+      ['mining-cortex-bonus', '1'],
+      ['mining-trade-exploit', '2'],
     ]);
 
-    const restoredHash = updateMiningSharedValue(withHashOverride, 'aiPerHash', 1.85);
-    expect(restoredHash.economy.prices).toEqual([]);
+    await act(async () => {
+      store.update((current) => ({
+        ...current,
+        progression: {
+          ...current.progression,
+          player: { ...current.progression.player, level: 77 },
+          skills: [{ id: 'mining-skill', level: 77 }],
+        },
+      }));
+      await Promise.resolve();
+    });
+    expect(selectMiningSharedValues(store.getSnapshot()).miningLevel).toBe('77');
+    expect(container.querySelector<HTMLInputElement>('#mining-level')?.value).toBe('400');
 
-    const withRateOverride = updateMiningSharedValue(
-      defaultSharedUserInputs,
-      'btcPerAi',
-      9000,
-    );
-    expect(withRateOverride.economy.exchangeRates).toEqual([
-      { id: 'btc-per-ai', value: 9000 },
-    ]);
+    await clickElement(container.querySelector<HTMLButtonElement>('[data-tool-fill-player=""]')!);
+    expect(container.querySelector<HTMLInputElement>('#mining-level')?.value).toBe('77');
+    expect(container.querySelector<HTMLInputElement>(
+      '#mining-cortex-bonus',
+    )?.getAttribute('aria-valuenow')).toBe('40');
+    expect(container.querySelector<HTMLInputElement>(
+      '#mining-trade-exploit',
+    )?.getAttribute('aria-valuenow')).toBe('80');
 
-    const restoredRate = updateMiningSharedValue(withRateOverride, 'btcPerAi', 8450);
-    expect(restoredRate.economy.exchangeRates).toEqual([]);
+    const sharedEconomy = store.getSnapshot().economy;
+    await updateInputs(container, [['mining-level', '500']]);
+    expect(selectMiningSharedValues(store.getSnapshot()).miningLevel).toBe('77');
+    await clickElement(container.querySelector<HTMLButtonElement>('[data-tool-reset=""]')!);
+    expect(selectMiningSharedValues(store.getSnapshot()).miningLevel).toBe('77');
+    expect(container.querySelector<HTMLInputElement>('#mining-level')?.value).toBe('77');
+    expect(container.querySelector<HTMLInputElement>(
+      '#mining-cortex-bonus',
+    )?.getAttribute('aria-valuenow')).toBe('100');
+    expect(container.querySelector<HTMLInputElement>(
+      '#mining-trade-exploit',
+    )?.getAttribute('aria-valuenow')).toBe('100');
+    expect(store.getSnapshot().economy).toEqual(sharedEconomy);
   });
 
   it('無效輸入不產生部分計算，且維持挖礦欄位的整數／範圍規則', () => {
@@ -421,8 +489,17 @@ describe('Mining calculator net profit unit toggles', () => {
   });
 
   it('依目前有效匯率重新計算兩種淨收益換算', async () => {
-    const { container } = await mountMiningCalculator();
-    await updateInputs(container, [['mining-btc-per-ai', '100']]);
+    const { container, store } = await mountMiningCalculator();
+    await act(async () => {
+      store.update((current) => ({
+        ...current,
+        economy: {
+          ...current.economy,
+          exchangeRates: [{ id: 'btc-per-ai', value: 100 }],
+        },
+      }));
+      await Promise.resolve();
+    });
 
     const btcAtHundred = readNetProfitAmount(container, 'btc');
     const aiAtHundred = readNetProfitAmount(container, 'ai');
@@ -435,7 +512,16 @@ describe('Mining calculator net profit unit toggles', () => {
     expect(readNetProfitAmount(container, 'ai')).toBeCloseTo(aiAtHundred * 100, 1);
     expect(readPerMinuteAmount(container, 'ai')).toBeCloseTo(aiPerMinuteAtHundred * 100, 1);
 
-    await updateInputs(container, [['mining-btc-per-ai', '200']]);
+    await act(async () => {
+      store.update((current) => ({
+        ...current,
+        economy: {
+          ...current.economy,
+          exchangeRates: [{ id: 'btc-per-ai', value: 200 }],
+        },
+      }));
+      await Promise.resolve();
+    });
     await clickElement(getToggle(container, 'btc'));
     const btcAtTwoHundred = readNetProfitAmount(container, 'btc');
     const btcPerMinuteAtTwoHundred = readPerMinuteAmount(container, 'btc');
@@ -452,11 +538,20 @@ describe('Mining calculator net profit unit toggles', () => {
   });
 
   it('維持負收益紅色，並依收益正負更新文字顏色', async () => {
-    const { container } = await mountMiningCalculator();
+    const { container, store } = await mountMiningCalculator();
+    await act(async () => {
+      store.update((current) => ({
+        ...current,
+        economy: {
+          ...current.economy,
+          prices: [{ itemId: 'hash', currencyId: 'ai', amount: 1.9 }],
+          exchangeRates: [{ id: 'btc-per-ai', value: 10000 }],
+        },
+      }));
+      await Promise.resolve();
+    });
     await updateInputs(container, [
       ['mining-level', '800'],
-      ['mining-hash-price', '1.9'],
-      ['mining-btc-per-ai', '10000'],
       ['mining-trade-exploit', '0'],
     ]);
 
@@ -473,16 +568,33 @@ describe('Mining calculator net profit unit toggles', () => {
     expect(getNetProfitElement(container, 'btc', 'value').className).toContain('text-foreground');
   });
 
-  it('匯率為 0 或非整數時沿用驗證無結果，不顯示 NaN 或 Infinity', async () => {
-    const { container } = await mountMiningCalculator();
-    const labels = getMessages('en').tools.mining;
+  it('共用價格與匯率欄位即時寫回；非法草稿不污染 sharedStore', async () => {
+    const { container, store } = await mountMiningCalculator();
+    await updateInputs(container, [['mining-level', '400']]);
+    const aiBeforePriceEdit = readNetProfitAmount(container, 'ai');
+    await updateInputs(container, [['mining-hash-price', '3']]);
+    expect(readNetProfitAmount(container, 'ai')).not.toBe(aiBeforePriceEdit);
 
-    for (const invalidRate of ['0', '0.5']) {
-      await updateInputs(container, [['mining-btc-per-ai', invalidRate]]);
-      expect(container.textContent).toContain(labels.validationSummary);
-      expect(container.querySelector('[data-testid="mining-net-profit-toggle-btc"]')).toBeNull();
-      expect(container.querySelector('[data-testid="mining-net-profit-toggle-ai"]')).toBeNull();
-      expect(container.textContent).not.toMatch(/NaN|Infinity/);
-    }
+    const btcBeforeRateEdit = readNetProfitAmount(container, 'btc');
+    await updateInputs(container, [['mining-btc-per-ai', '9000']]);
+    expect(readNetProfitAmount(container, 'btc')).not.toBe(btcBeforeRateEdit);
+
+    expect(store.getSnapshot().economy.prices).toContainEqual({
+      itemId: 'hash',
+      currencyId: 'ai',
+      amount: 3,
+    });
+    expect(store.getSnapshot().economy.exchangeRates).toContainEqual({
+      id: 'btc-per-ai',
+      value: 9000,
+    });
+
+    const beforeInvalid = store.getSnapshot();
+    await updateInputs(container, [['mining-btc-per-ai', '0']]);
+    expect(store.getSnapshot()).toEqual(beforeInvalid);
+    expect(container.querySelector<HTMLInputElement>('#mining-btc-per-ai')?.getAttribute('aria-invalid'))
+      .toBe('true');
+    expect(container.querySelector('[role="alert"]')?.textContent)
+      .toBe(getMessages('en').settingsPage.sharedValueError);
   });
 });

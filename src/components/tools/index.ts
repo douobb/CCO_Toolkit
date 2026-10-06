@@ -4,8 +4,10 @@ export {
   ToolBuffSliderField,
   ToolField,
   ToolInputField,
+  ToolPrimaryActions,
   ToolPresetButton,
   ToolResultCard,
+  ToolSharedNumberField,
   ToolState,
   ToolValidationSummary,
 } from './tool-ui';
@@ -15,8 +17,10 @@ export type {
   ToolBuffSliderFieldProps,
   ToolFieldProps,
   ToolInputFieldProps,
+  ToolPrimaryActionsProps,
   ToolPresetButtonProps,
   ToolResultCardProps,
+  ToolSharedNumberFieldProps,
   ToolStateProps,
   ToolValidationSummaryProps,
 } from './tool-ui';

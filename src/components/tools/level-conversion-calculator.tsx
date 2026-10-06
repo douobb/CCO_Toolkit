@@ -4,11 +4,9 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useState,
 } from 'react';
-import { Download, RotateCcw } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import type { ContextualDocsPageProps } from '@/components/context';
@@ -22,7 +20,7 @@ import {
   ToolField,
   ToolInputField,
   ToolPage,
-  ToolPresetButton,
+  ToolPrimaryActions,
   ToolState,
 } from '@/components/tools';
 import {
@@ -32,11 +30,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import {
-  economyDataSet,
   getEconomyItemDefinition,
-  getMarketCacheRateDefinition,
-  getMarketPriceDefinition,
-  type MarketPriceItemId,
 } from '@/data/game/economy';
 import {
   getProgressionLevelDefinition,
@@ -70,10 +64,6 @@ import {
 import { useToolStateStorage } from '@/lib/storage/use-tool-state';
 
 export interface LevelConversionToolLabels {
-  readonly settingsTab: string;
-  readonly settingsTitle: string;
-  readonly openSettings: string;
-  readonly closeSettings: string;
   readonly primaryInputs: string;
   readonly levelType: string;
   readonly currentLevel: string;
@@ -81,32 +71,15 @@ export interface LevelConversionToolLabels {
   readonly levelPlaceholder: string;
   readonly levelRange: string;
   readonly levelUnit: string;
-  readonly prices: string;
-  readonly hashPrice: string;
-  readonly techScrapPrice: string;
-  readonly medicalTechPartsPrice: string;
-  readonly ammunitionTechPartsPrice: string;
-  readonly militaryAmmunitionTechPartsPrice: string;
-  readonly cacheRate: string;
-  readonly btcPerAi: string;
-  readonly hashPriceUnit: string;
-  readonly materialPriceUnit: string;
-  readonly cacheRateUnit: string;
-  readonly btcPerAiUnit: string;
-  readonly buffs: string;
   readonly cortexBonus: string;
   readonly percentUnit: string;
-  readonly priceRange: string;
-  readonly rateRange: string;
   readonly buffRange: string;
   readonly reset: string;
-  readonly fillShared: string;
+  readonly fillPlayer: string;
   readonly validationSummary: string;
   readonly validationType: string;
   readonly validationLevel: string;
   readonly validationTargetBeforeCurrent: string;
-  readonly validationPrice: string;
-  readonly validationRate: string;
   readonly validationBuff: string;
   readonly noResult: string;
   readonly noResultHint: string;
@@ -144,8 +117,6 @@ export type LevelConversionError =
   | 'type'
   | 'level'
   | 'target'
-  | 'price'
-  | 'rate'
   | 'buff';
 export type LevelConversionErrors = Partial<
   Record<LevelConversionField, LevelConversionError>
@@ -158,18 +129,7 @@ export interface LevelConversionToolState {
   readonly cortexBonusPercent: string;
 }
 
-type LevelConversionPriceField =
-  | 'aiPerHash'
-  | 'aiPerTechScrap'
-  | 'aiPerMedicalTechParts'
-  | 'aiPerAmmunitionTechParts'
-  | 'aiPerMilitaryAmmunitionTechParts'
-  | 'trashCachePerAi';
-type LevelConversionWritableField = LevelConversionPriceField | 'btcPerAi';
-type LevelConversionPriceValues = Pick<
-  LevelConversionFormValues,
-  LevelConversionPriceField | 'btcPerAi'
->;
+type LevelConversionToolField = keyof LevelConversionToolState;
 export type LevelConversionSharedValues = Omit<LevelConversionFormValues, 'cortexBonusPercent'>;
 
 const defaultLevelConversionToolState: LevelConversionToolState = {
@@ -178,23 +138,6 @@ const defaultLevelConversionToolState: LevelConversionToolState = {
   targetLevel: String(LEVEL_MIN),
   cortexBonusPercent: BUFF_PERCENT_DEFAULT_STRING,
 };
-
-const levelConversionPriceFields = [
-  'aiPerHash',
-  'aiPerTechScrap',
-  'aiPerMedicalTechParts',
-  'aiPerAmmunitionTechParts',
-  'aiPerMilitaryAmmunitionTechParts',
-  'trashCachePerAi',
-] as const satisfies readonly LevelConversionWritableField[];
-
-const levelConversionPriceItems = {
-  aiPerHash: 'hash',
-  aiPerTechScrap: 'tech-scrap',
-  aiPerMedicalTechParts: 'medical-tech-parts',
-  aiPerAmmunitionTechParts: 'ammunition-tech-parts',
-  aiPerMilitaryAmmunitionTechParts: 'military-ammunition-tech-parts',
-} as const satisfies Record<Exclude<LevelConversionPriceField, 'trashCachePerAi'>, MarketPriceItemId>;
 
 function getSharedLevel(snapshot: SharedUserInputs, levelType: ProgressionLevelId): string {
   if (levelType === 'level') return String(snapshot.progression.player.level);
@@ -226,8 +169,8 @@ export function selectLevelConversionSharedValues(
   };
 }
 
-/** 將共用設定帶入等級／物價欄位；刻意不觸碰工具自己的 EXP Buff。 */
-export function applyLevelConversionSharedValues(
+/** 將玩家等級帶入目前試算；保留工具自己的 EXP Buff。 */
+export function applyLevelConversionPlayerValues(
   current: LevelConversionToolState,
   shared: LevelConversionSharedValues,
 ): LevelConversionToolState {
@@ -236,89 +179,6 @@ export function applyLevelConversionSharedValues(
     levelType: shared.levelType,
     currentLevel: shared.currentLevel,
     targetLevel: shared.targetLevel,
-  };
-}
-
-/** 將等級換算工具中的有效經濟設定回寫 Shared User Inputs。 */
-export function updateLevelConversionSharedValue(
-  snapshot: SharedUserInputs,
-  field: LevelConversionWritableField,
-  amount: number,
-): SharedUserInputs {
-  if (!Number.isFinite(amount) || amount < 0 || amount > Number.MAX_SAFE_INTEGER) {
-    return snapshot;
-  }
-
-  if (field === 'btcPerAi') {
-    if (!Number.isSafeInteger(amount) || amount < 1) return snapshot;
-
-    const definition = economyDataSet.payload.exchangeRates.find(
-      (rate) => rate.id === 'btc-per-ai',
-    );
-    if (!definition) return snapshot;
-
-    const ratesWithoutCurrent = snapshot.economy.exchangeRates.filter(
-      (rate) => rate.id !== 'btc-per-ai',
-    );
-
-    return {
-      ...snapshot,
-      economy: {
-        ...snapshot.economy,
-        exchangeRates: amount === definition.defaultValue
-          ? ratesWithoutCurrent
-          : [...ratesWithoutCurrent, { id: 'btc-per-ai', value: amount }],
-      },
-    };
-  }
-
-  if (field === 'trashCachePerAi') {
-    if (!Number.isSafeInteger(amount) || amount < 1) return snapshot;
-
-    const definition = getMarketCacheRateDefinition('trash');
-    const ratesWithoutCurrent = snapshot.economy.cacheRates.filter(
-      (rate) => rate.id !== 'trash',
-    );
-
-    return {
-      ...snapshot,
-      economy: {
-        ...snapshot.economy,
-        cacheRates: amount === definition.defaultValue
-          ? ratesWithoutCurrent
-          : [...ratesWithoutCurrent, { id: 'trash', value: amount }],
-      },
-    };
-  }
-
-  const itemId = levelConversionPriceItems[field];
-  const definition = getMarketPriceDefinition(itemId);
-  const currentPrices = resolveMarketPrices(snapshot);
-  const basisAmount = definition.defaultBasisCurrencyId === 'ai'
-    ? amount
-    : amount * currentPrices.btcPerAi;
-
-  if (!Number.isFinite(basisAmount) || basisAmount > Number.MAX_SAFE_INTEGER) {
-    return snapshot;
-  }
-
-  const pricesWithoutCurrent = snapshot.economy.prices.filter(
-    (price) => price.itemId !== itemId,
-  );
-  const nextPrice = {
-    itemId,
-    currencyId: definition.defaultBasisCurrencyId,
-    amount: basisAmount,
-  };
-
-  return {
-    ...snapshot,
-    economy: {
-      ...snapshot.economy,
-      prices: basisAmount === definition.defaultBasisValue
-        ? pricesWithoutCurrent
-        : [...pricesWithoutCurrent, nextPrice],
-    },
   };
 }
 
@@ -380,27 +240,12 @@ export function normalizeLevelConversionToolState(
 
 export function createLevelConversionValues(
   toolState: LevelConversionToolState,
-  priceDrafts: LevelConversionPriceValues,
+  sharedValues: LevelConversionSharedValues,
 ): LevelConversionFormValues {
   return {
+    ...sharedValues,
     ...toolState,
-    ...priceDrafts,
   };
-}
-
-function parseNonNegativeNumber(value: string): number | null {
-  if (!value.trim()) return null;
-
-  const parsed = Number(value);
-  if (
-    !Number.isFinite(parsed) ||
-    parsed < 0 ||
-    parsed > Number.MAX_SAFE_INTEGER
-  ) {
-    return null;
-  }
-
-  return parsed;
 }
 
 function parseInteger(value: string, min: number, max: number): number | null {
@@ -413,17 +258,6 @@ function parseInteger(value: string, min: number, max: number): number | null {
   return parsed;
 }
 
-function parseLevelConversionWritableValue(
-  field: LevelConversionWritableField,
-  value: string,
-): number | null {
-  if (field === 'btcPerAi' || field === 'trashCachePerAi') {
-    return parseInteger(value, 1, Number.MAX_SAFE_INTEGER);
-  }
-
-  return parseNonNegativeNumber(value);
-}
-
 export function parseLevelConversionValues(values: LevelConversionFormValues): {
   readonly errors: LevelConversionErrors;
   readonly inputs: LevelCalculationInputs | null;
@@ -434,14 +268,6 @@ export function parseLevelConversionValues(values: LevelConversionFormValues): {
   const cortexBonusPercent = parseBuffPercent(values.cortexBonusPercent);
   const errors: LevelConversionErrors = {};
 
-  for (const field of levelConversionPriceFields) {
-    const parsed = parseLevelConversionWritableValue(field, values[field]);
-    if (parsed === null) errors[field] = field === 'trashCachePerAi' ? 'rate' : 'price';
-  }
-
-  if (parseLevelConversionWritableValue('btcPerAi', values.btcPerAi) === null) {
-    errors.btcPerAi = 'rate';
-  }
   if (levelType === null) errors.levelType = 'type';
   if (currentLevel === null) errors.currentLevel = 'level';
   if (targetLevel === null) errors.targetLevel = 'level';
@@ -465,27 +291,6 @@ export function parseLevelConversionValues(values: LevelConversionFormValues): {
   };
 }
 
-function resolveLevelConversionPrices(
-  values: LevelConversionFormValues,
-  snapshot: SharedUserInputs,
-): ResolvedMarketPrices {
-  let nextSnapshot = snapshot;
-
-  for (const field of levelConversionPriceFields) {
-    const parsed = parseLevelConversionWritableValue(field, values[field]);
-    if (parsed !== null) {
-      nextSnapshot = updateLevelConversionSharedValue(nextSnapshot, field, parsed);
-    }
-  }
-
-  const btcPerAi = parseLevelConversionWritableValue('btcPerAi', values.btcPerAi);
-  if (btcPerAi !== null) {
-    nextSnapshot = updateLevelConversionSharedValue(nextSnapshot, 'btcPerAi', btcPerAi);
-  }
-
-  return resolveMarketPrices(nextSnapshot);
-}
-
 export function calculateLevelConversionTool(
   values: LevelConversionFormValues,
   snapshot: SharedUserInputs = defaultSharedUserInputs,
@@ -500,7 +305,7 @@ export function calculateLevelConversionTool(
     errors: parsed.errors,
     inputs: parsed.inputs,
     result: parsed.inputs
-      ? calculateLevelRequirements(parsed.inputs, resolveLevelConversionPrices(values, snapshot))
+      ? calculateLevelRequirements(parsed.inputs, resolveMarketPrices(snapshot))
       : null,
   };
 }
@@ -510,8 +315,8 @@ interface LevelConversionContextValue {
   readonly errors: LevelConversionErrors;
   readonly inputs: LevelCalculationInputs | null;
   readonly result: LevelCalculation | null;
-  readonly setValue: (field: LevelConversionField, value: string) => void;
-  readonly fillFromShared: () => void;
+  readonly setValue: (field: LevelConversionToolField, value: string) => void;
+  readonly fillPlayer: () => void;
   readonly reset: () => void;
 }
 
@@ -549,21 +354,6 @@ export function LevelConversionToolProvider({ children }: { children: ReactNode 
       },
     },
   );
-  const [priceDrafts, setPriceDrafts] = useState<LevelConversionPriceValues>(() => {
-    const defaults = selectLevelConversionSharedValues(defaultSharedUserInputs);
-    return {
-      aiPerHash: defaults.aiPerHash,
-      aiPerTechScrap: defaults.aiPerTechScrap,
-      aiPerMedicalTechParts: defaults.aiPerMedicalTechParts,
-      aiPerAmmunitionTechParts: defaults.aiPerAmmunitionTechParts,
-      aiPerMilitaryAmmunitionTechParts: defaults.aiPerMilitaryAmmunitionTechParts,
-      trashCachePerAi: defaults.trashCachePerAi,
-      btcPerAi: defaults.btcPerAi,
-    };
-  });
-  const [dirtyFields, setDirtyFields] = useState<ReadonlySet<LevelConversionWritableField>>(
-    () => new Set(),
-  );
   const sharedValues = useMemo(
     () => selectLevelConversionSharedValues(sharedSnapshot, isLevelTypeId(toolState.levelType)
       ? toolState.levelType
@@ -571,86 +361,19 @@ export function LevelConversionToolProvider({ children }: { children: ReactNode 
     [sharedSnapshot, toolState.levelType],
   );
 
-  useEffect(() => {
-    let cancelled = false;
-    queueMicrotask(() => {
-      if (cancelled) return;
-
-      setPriceDrafts((current) => {
-        let next: LevelConversionPriceValues | null = null;
-
-        for (const field of levelConversionPriceFields) {
-          if (!dirtyFields.has(field) && current[field] !== sharedValues[field]) {
-            next = { ...(next ?? current), [field]: sharedValues[field] };
-          }
-        }
-
-        if (!dirtyFields.has('btcPerAi') && current.btcPerAi !== sharedValues.btcPerAi) {
-          next = { ...(next ?? current), btcPerAi: sharedValues.btcPerAi };
-        }
-
-        return next ?? current;
-      });
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [dirtyFields, sharedValues]);
-
   const setValue = useCallback(
-    (field: LevelConversionField, value: string) => {
-      if (
-        field === 'levelType' ||
-        field === 'currentLevel' ||
-        field === 'targetLevel' ||
-        field === 'cortexBonusPercent'
-      ) {
-        setToolState((current) => ({ ...current, [field]: value }));
-        return;
-      }
-
-      setPriceDrafts((current) => ({ ...current, [field]: value }));
-      setDirtyFields((current) => {
-        const next = new Set(current);
-        next.add(field);
-        return next;
-      });
-
-      const parsed = parseLevelConversionWritableValue(field, value);
-      if (parsed === null) return;
-
-      const accepted = sharedStore.update((current) =>
-        updateLevelConversionSharedValue(current, field, parsed),
-      );
-      if (!accepted) return;
-
-      setDirtyFields((current) => {
-        if (!current.has(field)) return current;
-        const next = new Set(current);
-        next.delete(field);
-        return next;
-      });
+    (field: LevelConversionToolField, value: string) => {
+      setToolState((current) => ({ ...current, [field]: value }));
     },
-    [setToolState, sharedStore],
+    [setToolState],
   );
 
-  const fillFromShared = useCallback(() => {
+  const fillPlayer = useCallback(() => {
     const latestSharedValues = selectLevelConversionSharedValues(
       sharedStore.getSnapshot(),
       isLevelTypeId(toolState.levelType) ? toolState.levelType : 'level',
     );
-    setToolState((current) => applyLevelConversionSharedValues(current, latestSharedValues));
-    setPriceDrafts({
-      aiPerHash: latestSharedValues.aiPerHash,
-      aiPerTechScrap: latestSharedValues.aiPerTechScrap,
-      aiPerMedicalTechParts: latestSharedValues.aiPerMedicalTechParts,
-      aiPerAmmunitionTechParts: latestSharedValues.aiPerAmmunitionTechParts,
-      aiPerMilitaryAmmunitionTechParts: latestSharedValues.aiPerMilitaryAmmunitionTechParts,
-      trashCachePerAi: latestSharedValues.trashCachePerAi,
-      btcPerAi: latestSharedValues.btcPerAi,
-    });
-    setDirtyFields(new Set());
+    setToolState((current) => applyLevelConversionPlayerValues(current, latestSharedValues));
   }, [setToolState, sharedStore, toolState.levelType]);
 
   const reset = useCallback(() => {
@@ -665,21 +388,11 @@ export function LevelConversionToolProvider({ children }: { children: ReactNode 
       targetLevel: latestSharedValues.targetLevel,
       cortexBonusPercent: defaultLevelConversionToolState.cortexBonusPercent,
     });
-    setPriceDrafts({
-      aiPerHash: latestSharedValues.aiPerHash,
-      aiPerTechScrap: latestSharedValues.aiPerTechScrap,
-      aiPerMedicalTechParts: latestSharedValues.aiPerMedicalTechParts,
-      aiPerAmmunitionTechParts: latestSharedValues.aiPerAmmunitionTechParts,
-      aiPerMilitaryAmmunitionTechParts: latestSharedValues.aiPerMilitaryAmmunitionTechParts,
-      trashCachePerAi: latestSharedValues.trashCachePerAi,
-      btcPerAi: latestSharedValues.btcPerAi,
-    });
-    setDirtyFields(new Set());
-  }, [setDirtyFields, setPriceDrafts, setToolState, sharedStore]);
+  }, [setToolState, sharedStore]);
 
   const values = useMemo(
-    () => createLevelConversionValues(toolState, priceDrafts),
-    [priceDrafts, toolState],
+    () => createLevelConversionValues(toolState, sharedValues),
+    [sharedValues, toolState],
   );
   const calculation = useMemo(
     () => calculateLevelConversionTool(values, sharedSnapshot),
@@ -692,10 +405,10 @@ export function LevelConversionToolProvider({ children }: { children: ReactNode 
       inputs: calculation.inputs,
       result: calculation.result,
       setValue,
-      fillFromShared,
+      fillPlayer,
       reset,
     }),
-    [calculation, fillFromShared, reset, setValue, values],
+    [calculation, fillPlayer, reset, setValue, values],
   );
 
   return (
@@ -714,8 +427,6 @@ function getErrorMessage(
   if (error === 'type') return labels.validationType;
   if (error === 'target') return labels.validationTargetBeforeCurrent;
   if (error === 'level') return labels.validationLevel;
-  if (error === 'price') return labels.validationPrice;
-  if (error === 'rate') return labels.validationRate;
   if (error === 'buff') return labels.validationBuff;
   return undefined;
 }
@@ -790,39 +501,6 @@ function LevelNumberField({
   );
 }
 
-function LevelPriceField({
-  field,
-  id,
-  label,
-  unit,
-  labels,
-}: {
-  field: LevelConversionPriceField;
-  id: string;
-  label: string;
-  unit: string;
-  labels: LevelConversionToolLabels;
-}) {
-  const { values, errors, setValue } = useLevelConversionTool();
-  const isCacheRate = field === 'trashCachePerAi';
-
-  return (
-    <ToolInputField
-      id={id}
-      label={label}
-      type="number"
-      inputMode={isCacheRate ? 'numeric' : 'decimal'}
-      min={isCacheRate ? 1 : 0}
-      step={isCacheRate ? 1 : 'any'}
-      value={values[field]}
-      onChange={(event) => setValue(field, event.target.value)}
-      error={getErrorMessage(field, errors, labels)}
-      range={isCacheRate ? labels.rateRange : labels.priceRange}
-      unit={unit}
-    />
-  );
-}
-
 function LevelSettingField({
   field,
   id,
@@ -830,140 +508,24 @@ function LevelSettingField({
   unit,
   labels,
 }: {
-  field: 'btcPerAi' | 'cortexBonusPercent';
+  field: 'cortexBonusPercent';
   id: string;
   label: string;
   unit: string;
   labels: LevelConversionToolLabels;
 }) {
   const { values, errors, setValue } = useLevelConversionTool();
-  const isRate = field === 'btcPerAi';
-
-  if (!isRate) {
-    return (
-      <ToolBuffSliderField
-        id={id}
-        label={label}
-        range={labels.buffRange}
-        unit={unit}
-        value={values[field]}
-        onValueChange={(value) => setValue(field, String(value))}
-        error={getErrorMessage(field, errors, labels)}
-      />
-    );
-  }
 
   return (
-    <ToolInputField
+    <ToolBuffSliderField
       id={id}
       label={label}
-      type="number"
-      inputMode="numeric"
-      min={isRate ? 1 : 0}
-      max={isRate ? undefined : 100}
-      step="1"
-      value={values[field]}
-      onChange={(event) => setValue(field, event.target.value)}
-      error={getErrorMessage(field, errors, labels)}
-      range={isRate ? labels.rateRange : labels.buffRange}
+      range={labels.buffRange}
       unit={unit}
+      value={values[field]}
+      onValueChange={(value) => setValue(field, String(value))}
+      error={getErrorMessage(field, errors, labels)}
     />
-  );
-}
-
-export function LevelConversionSettingsPanel({
-  labels,
-  locale,
-  idPrefix = 'level-conversion-settings',
-}: {
-  labels: LevelConversionToolLabels;
-  locale: Locale;
-  idPrefix?: string;
-}) {
-  const { reset } = useLevelConversionTool();
-  const cacheLabel = getMarketCacheRateDefinition('trash').labels[locale];
-
-  return (
-    <div className="flex h-full flex-col gap-6 p-4">
-      <div>
-        <h2 className="font-semibold text-foreground">{labels.settingsTitle}</h2>
-      </div>
-
-      <div className="space-y-4">
-        <h3 className="text-sm font-medium text-foreground">{labels.prices}</h3>
-        <LevelPriceField
-          field="aiPerHash"
-          id={idPrefix + '-hash-price'}
-          label={labels.hashPrice}
-          unit={labels.hashPriceUnit}
-          labels={labels}
-        />
-        <LevelPriceField
-          field="aiPerTechScrap"
-          id={idPrefix + '-tech-scrap-price'}
-          label={labels.techScrapPrice}
-          unit={labels.materialPriceUnit}
-          labels={labels}
-        />
-        <LevelPriceField
-          field="aiPerMedicalTechParts"
-          id={idPrefix + '-medical-tech-parts-price'}
-          label={labels.medicalTechPartsPrice}
-          unit={labels.materialPriceUnit}
-          labels={labels}
-        />
-        <LevelPriceField
-          field="aiPerAmmunitionTechParts"
-          id={idPrefix + '-ammunition-tech-parts-price'}
-          label={labels.ammunitionTechPartsPrice}
-          unit={labels.materialPriceUnit}
-          labels={labels}
-        />
-        <LevelPriceField
-          field="aiPerMilitaryAmmunitionTechParts"
-          id={idPrefix + '-military-ammunition-tech-parts-price'}
-          label={labels.militaryAmmunitionTechPartsPrice}
-          unit={labels.materialPriceUnit}
-          labels={labels}
-        />
-        <LevelPriceField
-          field="trashCachePerAi"
-          id={idPrefix + '-trash-cache-rate'}
-          label={`${cacheLabel} ${labels.cacheRate}`}
-          unit={labels.cacheRateUnit}
-          labels={labels}
-        />
-        <LevelSettingField
-          field="btcPerAi"
-          id={idPrefix + '-btc-per-ai'}
-          label={labels.btcPerAi}
-          unit={labels.btcPerAiUnit}
-          labels={labels}
-        />
-      </div>
-
-      <div className="space-y-4">
-        <h3 className="text-sm font-medium text-foreground">{labels.buffs}</h3>
-        <LevelSettingField
-          field="cortexBonusPercent"
-          id={idPrefix + '-cortex-bonus'}
-          label={labels.cortexBonus}
-          unit={labels.percentUnit}
-          labels={labels}
-        />
-      </div>
-
-      <div className="mt-auto border-t border-border pt-4">
-        <ToolPresetButton
-          type="button"
-          variant="outline"
-          className="w-full"
-          onClick={reset}
-          icon={<RotateCcw aria-hidden="true" />}
-          label={labels.reset}
-        />
-      </div>
-    </div>
   );
 }
 
@@ -1113,7 +675,7 @@ export function LevelConversionCalculator({
   locale: Locale;
   numberFormatter?: NumberFormatter;
 }) {
-  const { errors, inputs, result, fillFromShared } = useLevelConversionTool();
+  const { errors, inputs, result, fillPlayer, reset } = useLevelConversionTool();
   const hasErrors = Object.keys(errors).length > 0;
   const formatNumber = useMemo(
     () => numberFormatter ?? createNumberFormatter(locale),
@@ -1128,12 +690,10 @@ export function LevelConversionCalculator({
             <div>
               <CardTitle className="site-tool-section-heading">{labels.primaryInputs}</CardTitle>
             </div>
-            <ToolPresetButton
-              type="button"
-              variant="outline"
-              onClick={fillFromShared}
-              icon={<Download aria-hidden="true" />}
-              label={labels.fillShared}
+            <ToolPrimaryActions
+              fillPlayer={{ label: labels.fillPlayer, onClick: fillPlayer }}
+              onReset={reset}
+              resetLabel={labels.reset}
             />
           </div>
         </CardHeader>
@@ -1153,6 +713,13 @@ export function LevelConversionCalculator({
                 id="level-conversion-target-level"
                 label={labels.targetLevel}
                 placeholder={labels.levelPlaceholder}
+                labels={labels}
+              />
+              <LevelSettingField
+                field="cortexBonusPercent"
+                id="level-conversion-cortex-bonus"
+                label={labels.cortexBonus}
+                unit={labels.percentUnit}
                 labels={labels}
               />
             </div>
@@ -1185,8 +752,6 @@ export function LevelConversionToolPage({
   contextLabel,
   contextPanelLabel,
   contextCloseLabel,
-  labels,
-  locale,
   header,
   headerActions,
   children,
@@ -1207,17 +772,6 @@ export function LevelConversionToolPage({
         contextCloseLabel={contextCloseLabel}
         header={header}
         headerActions={headerActions}
-        settings={{
-          id: 'settings',
-          label: labels.settingsTab,
-          title: labels.settingsTitle,
-          openLabel: labels.openSettings,
-          closeLabel: labels.closeSettings,
-          idPrefix: 'level-conversion-settings',
-          render: ({ idPrefix }) => (
-            <LevelConversionSettingsPanel labels={labels} locale={locale} idPrefix={idPrefix} />
-          ),
-        }}
       >
         {children}
       </ToolPage>

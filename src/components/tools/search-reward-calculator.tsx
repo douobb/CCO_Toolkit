@@ -9,7 +9,6 @@ import {
   useRef,
   useState,
 } from 'react';
-import { Download, RotateCcw } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import type { ContextualDocsPageProps } from '@/components/context';
@@ -21,8 +20,8 @@ import {
   ToolBreakdown,
   ToolInputField,
   ToolPage,
+  ToolPrimaryActions,
   ToolResultCard,
-  ToolPresetButton,
   ToolState,
   ToolValidationSummary,
 } from '@/components/tools';
@@ -36,11 +35,9 @@ import { getProgressionLevelDefinition } from '@/data/game/progression';
 import {
   calculateSearchReward,
   defaultSearchRewards,
-  parseSearchRewardPrice,
   searchRewardInputLimits,
   type SearchRewardCalculation,
   type SearchRewardErrors,
-  type SearchRewardField,
   type SearchRewardFormValues,
   type SearchRewardInputs,
 } from '@/lib/search-reward';
@@ -54,7 +51,6 @@ import {
 } from '@/lib/market-prices';
 import {
   clearToolState,
-  defaultSharedUserInputs,
   type SharedUserInputs,
 } from '@/lib/storage';
 import { useToolStateStorage } from '@/lib/storage/use-tool-state';
@@ -62,10 +58,6 @@ import { createNumberFormatter, type NumberFormatter } from '@/lib/number-format
 import type { Locale } from '@/lib/i18n';
 
 export interface SearchRewardToolLabels {
-  readonly settingsTab: string;
-  readonly settingsTitle: string;
-  readonly openSettings: string;
-  readonly closeSettings: string;
   readonly primaryInputs: string;
   readonly playerLevel: string;
   readonly playerLevelPlaceholder: string;
@@ -75,12 +67,6 @@ export interface SearchRewardToolLabels {
   readonly searchCountPlaceholder: string;
   readonly searchCountRange: string;
   readonly searchCountUnit: string;
-  readonly prices: string;
-  readonly priceUnit: string;
-  readonly priceRange: string;
-  readonly medicalPartsPrice: string;
-  readonly ammoPartsPrice: string;
-  readonly militaryAmmoPartsPrice: string;
   readonly reset: string;
   readonly resultTitle: string;
   readonly area: string;
@@ -112,8 +98,7 @@ export interface SearchRewardToolLabels {
   readonly chartNoDataHint: string;
   readonly validationLevel: string;
   readonly validationCount: string;
-  readonly validationPrice: string;
-  readonly fillShared: string;
+  readonly fillPlayer: string;
 }
 
 type SearchRewardPriceField = 'mtPrice' | 'atpPrice' | 'matpPrice';
@@ -121,7 +106,7 @@ type SearchRewardSharedValues = Pick<
   SearchRewardFormValues,
   'playerLevel' | SearchRewardPriceField
 >;
-type SearchRewardPriceValues = Pick<SearchRewardFormValues, SearchRewardPriceField>;
+type SearchRewardToolField = 'searchCount' | 'playerLevel';
 
 interface SearchRewardToolState {
   readonly searchCount: string;
@@ -133,8 +118,6 @@ const defaultSearchRewardToolState: SearchRewardToolState = {
   searchCount: '10',
   playerLevel: '1',
 };
-
-const searchRewardPriceFields = ['mtPrice', 'atpPrice', 'matpPrice'] as const;
 
 const searchRewardPriceItems = {
   mtPrice: getSearchRewardPriceDefinition('mt').itemId,
@@ -175,31 +158,6 @@ export function selectSearchRewardSharedValues(
   };
 }
 
-/** 將工具中的有效物價寫回共用庫，並固定使用工具計算所需的 AI/k 基準。 */
-export function updateSearchRewardSharedPrice(
-  snapshot: SharedUserInputs,
-  field: SearchRewardPriceField,
-  amount: number,
-): SharedUserInputs {
-  const itemId = searchRewardPriceItems[field];
-  const definition = getMarketPriceDefinition(itemId);
-  const nextPrice = {
-    itemId,
-    currencyId: definition.defaultBasisCurrencyId,
-    amount,
-  };
-  const pricesWithoutItem = snapshot.economy.prices.filter((price) => price.itemId !== itemId);
-  const isDefaultPrice = amount === definition.defaultBasisValue;
-
-  return {
-    ...snapshot,
-    economy: {
-      ...snapshot.economy,
-      prices: isDefaultPrice ? pricesWithoutItem : [...pricesWithoutItem, nextPrice],
-    },
-  };
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
@@ -222,14 +180,14 @@ function isSearchRewardToolState(value: unknown): value is SearchRewardToolState
 
 export function createSearchRewardValues(
   toolState: Pick<SearchRewardToolState, 'searchCount' | 'playerLevel'>,
-  priceDrafts: SearchRewardPriceValues,
+  sharedValues: SearchRewardSharedValues,
 ): SearchRewardFormValues {
   return {
     playerLevel: toolState.playerLevel,
     searchCount: toolState.searchCount,
-    mtPrice: priceDrafts.mtPrice,
-    atpPrice: priceDrafts.atpPrice,
-    matpPrice: priceDrafts.matpPrice,
+    mtPrice: sharedValues.mtPrice,
+    atpPrice: sharedValues.atpPrice,
+    matpPrice: sharedValues.matpPrice,
   };
 }
 
@@ -238,8 +196,8 @@ interface SearchRewardContextValue {
   readonly errors: SearchRewardErrors;
   readonly inputs: SearchRewardInputs | null;
   readonly result: SearchRewardCalculation['result'];
-  readonly setValue: (field: SearchRewardField, value: string) => void;
-  readonly fillFromShared: () => void;
+  readonly setValue: (field: SearchRewardToolField, value: string) => void;
+  readonly fillPlayer: () => void;
   readonly reset: () => void;
 }
 
@@ -268,90 +226,25 @@ export function SearchRewardToolProvider({ children }: { children: ReactNode }) 
       }),
     },
   );
-  const [priceDrafts, setPriceDrafts] = useState<SearchRewardPriceValues>(() => {
-    const defaults = selectSearchRewardSharedValues(defaultSharedUserInputs);
-    return {
-      mtPrice: defaults.mtPrice,
-      atpPrice: defaults.atpPrice,
-      matpPrice: defaults.matpPrice,
-    };
-  });
-  const [dirtyPriceFields, setDirtyPriceFields] = useState<
-    ReadonlySet<SearchRewardPriceField>
-  >(() => new Set());
   const sharedValues = useMemo<SearchRewardSharedValues>(
     () => selectSearchRewardSharedValues(sharedSnapshot),
     [sharedSnapshot],
   );
 
-  useEffect(() => {
-    let cancelled = false;
-    queueMicrotask(() => {
-      if (cancelled) return;
-
-      setPriceDrafts((current) => {
-        let next: SearchRewardPriceValues | null = null;
-
-        for (const field of searchRewardPriceFields) {
-          if (!dirtyPriceFields.has(field) && current[field] !== sharedValues[field]) {
-            next = { ...(next ?? current), [field]: sharedValues[field] };
-          }
-        }
-
-        return next ?? current;
-      });
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [dirtyPriceFields, sharedValues]);
-
   const setValue = useCallback(
-    (field: SearchRewardField, value: string) => {
-      if (field === 'searchCount' || field === 'playerLevel') {
-        setToolState((current) => ({ ...current, [field]: value }));
-        return;
-      }
-
-      setPriceDrafts((current) => ({ ...current, [field]: value }));
-      setDirtyPriceFields((current) => {
-        const next = new Set(current);
-        next.add(field);
-        return next;
-      });
-
-      const parsed = parseSearchRewardPrice(value);
-      if (parsed === null) return;
-
-      const accepted = sharedStore.update((current) =>
-        updateSearchRewardSharedPrice(current, field, parsed),
-      );
-      if (!accepted) return;
-
-      setDirtyPriceFields((current) => {
-        if (!current.has(field)) return current;
-        const next = new Set(current);
-        next.delete(field);
-        return next;
-      });
+    (field: SearchRewardToolField, value: string) => {
+      setToolState((current) => ({ ...current, [field]: value }));
     },
-    [setToolState, sharedStore],
+    [setToolState],
   );
 
-  const fillFromShared = useCallback(() => {
+  const fillPlayer = useCallback(() => {
     const latestSharedValues = selectSearchRewardSharedValues(sharedStore.getSnapshot());
     setToolState((current) => ({
       ...current,
       playerLevel: latestSharedValues.playerLevel,
     }));
-    setPriceDrafts({
-      mtPrice: latestSharedValues.mtPrice,
-      atpPrice: latestSharedValues.atpPrice,
-      matpPrice: latestSharedValues.matpPrice,
-    });
-    setDirtyPriceFields(new Set());
-  }, [setDirtyPriceFields, setPriceDrafts, setToolState, sharedStore]);
+  }, [setToolState, sharedStore]);
 
   const reset = useCallback(() => {
     clearToolState('search-reward');
@@ -360,17 +253,11 @@ export function SearchRewardToolProvider({ children }: { children: ReactNode }) 
       ...defaultSearchRewardToolState,
       playerLevel: latestSharedValues.playerLevel,
     });
-    setPriceDrafts({
-      mtPrice: latestSharedValues.mtPrice,
-      atpPrice: latestSharedValues.atpPrice,
-      matpPrice: latestSharedValues.matpPrice,
-    });
-    setDirtyPriceFields(new Set());
-  }, [setDirtyPriceFields, setPriceDrafts, setToolState, sharedStore]);
+  }, [setToolState, sharedStore]);
 
   const values = useMemo<SearchRewardFormValues>(
-    () => createSearchRewardValues(toolState, priceDrafts),
-    [priceDrafts, toolState],
+    () => createSearchRewardValues(toolState, sharedValues),
+    [sharedValues, toolState],
   );
 
   const calculation = useMemo(() => calculateSearchReward(defaultSearchRewards, values), [values]);
@@ -382,10 +269,10 @@ export function SearchRewardToolProvider({ children }: { children: ReactNode }) 
       inputs: calculation.inputs,
       result: calculation.result,
       setValue,
-      fillFromShared,
+      fillPlayer,
       reset,
     }),
-    [calculation, fillFromShared, reset, setValue, values],
+    [calculation, fillPlayer, reset, setValue, values],
   );
 
   return (
@@ -403,95 +290,14 @@ function formatTemplate(template: string, replacements: Record<string, number>) 
 }
 
 function getErrorMessage(
-  field: SearchRewardField,
+  field: SearchRewardToolField,
   errors: SearchRewardErrors,
   labels: SearchRewardToolLabels,
 ) {
   const error = errors[field];
   if (error === 'level') return labels.validationLevel;
   if (error === 'count') return labels.validationCount;
-  if (error === 'price') return labels.validationPrice;
   return undefined;
-}
-
-function SearchRewardPriceField({
-  field,
-  id,
-  label,
-  labels,
-}: {
-  field: SearchRewardPriceField;
-  id: string;
-  label: string;
-  labels: SearchRewardToolLabels;
-}) {
-  const { values, errors, setValue } = useSearchRewardTool();
-  const errorMessage = getErrorMessage(field, errors, labels);
-
-  return (
-    <ToolInputField
-      id={id}
-      label={label}
-      type="number"
-      inputMode="decimal"
-      min="0"
-      step="any"
-      value={values[field]}
-      onChange={(event) => setValue(field, event.target.value)}
-      error={errorMessage}
-      range={labels.priceRange}
-      unit={labels.priceUnit}
-    />
-  );
-}
-
-export function SearchRewardSettingsPanel({
-  labels,
-  idPrefix = 'search-reward-settings',
-}: {
-  labels: SearchRewardToolLabels;
-  idPrefix?: string;
-}) {
-  const { reset } = useSearchRewardTool();
-
-  return (
-    <div className="flex h-full flex-col gap-6 p-4">
-      <div>
-        <h2 className="font-semibold text-foreground">{labels.settingsTitle}</h2>
-      </div>
-      <div className="space-y-4">
-        <h3 className="text-sm font-medium text-foreground">{labels.prices}</h3>
-        <SearchRewardPriceField
-          field="mtPrice"
-          id={`${idPrefix}-mt-price`}
-          label={labels.medicalPartsPrice}
-          labels={labels}
-        />
-        <SearchRewardPriceField
-          field="atpPrice"
-          id={`${idPrefix}-atp-price`}
-          label={labels.ammoPartsPrice}
-          labels={labels}
-        />
-        <SearchRewardPriceField
-          field="matpPrice"
-          id={`${idPrefix}-matp-price`}
-          label={labels.militaryAmmoPartsPrice}
-          labels={labels}
-        />
-      </div>
-      <div className="mt-auto space-y-3 border-t border-border pt-4">
-        <ToolPresetButton
-          type="button"
-          variant="outline"
-          className="w-full"
-          onClick={reset}
-          icon={<RotateCcw aria-hidden="true" />}
-          label={labels.reset}
-        />
-      </div>
-    </div>
-  );
 }
 
 function PrimaryInputField({
@@ -543,7 +349,7 @@ export function SearchRewardCalculator({
   locale: Locale;
   numberFormatter?: NumberFormatter;
 }) {
-  const { errors, inputs, result, fillFromShared } = useSearchRewardTool();
+  const { errors, inputs, result, fillPlayer, reset } = useSearchRewardTool();
   const optimalArea = result?.optimalArea;
   const hasErrors = Object.keys(errors).length > 0;
   const formatNumber = useMemo(
@@ -578,12 +384,10 @@ export function SearchRewardCalculator({
             <div>
               <CardTitle className="site-tool-section-heading">{labels.primaryInputs}</CardTitle>
             </div>
-            <ToolPresetButton
-              type="button"
-              variant="outline"
-              onClick={fillFromShared}
-              icon={<Download aria-hidden="true" />}
-              label={labels.fillShared}
+            <ToolPrimaryActions
+              fillPlayer={{ label: labels.fillPlayer, onClick: fillPlayer }}
+              onReset={reset}
+              resetLabel={labels.reset}
             />
           </div>
         </CardHeader>
@@ -776,17 +580,6 @@ export function SearchRewardToolPage({
         contextCloseLabel={contextCloseLabel}
         header={header}
         headerActions={headerActions}
-        settings={{
-          id: 'settings',
-          label: labels.settingsTab,
-          title: labels.settingsTitle,
-          openLabel: labels.openSettings,
-          closeLabel: labels.closeSettings,
-          idPrefix: 'search-reward-settings',
-          render: ({ idPrefix }) => (
-            <SearchRewardSettingsPanel labels={labels} idPrefix={idPrefix} />
-          ),
-        }}
       >
         {children}
       </ToolPage>

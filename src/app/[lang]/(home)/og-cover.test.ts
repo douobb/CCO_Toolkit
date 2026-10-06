@@ -6,7 +6,7 @@ import sharp from 'sharp';
 import { describe, expect, it, vi } from 'vitest';
 
 import AboutPage from './about/page';
-import aboutStyles from './about/about.module.css';
+import aboutStyles from './page-hero.module.css';
 import { generateMetadata } from './page';
 import RecommendationsPage from './recommendations/page';
 import { getHomepageShareMetadata, siteOgCover } from '@/lib/site-brand';
@@ -41,7 +41,7 @@ vi.mock('fumadocs-ui/layouts/docs/page', () => ({
 vi.mock('fumadocs-ui/mdx', () => ({ createRelativeLink: () => () => null }));
 
 const imagePath = fileURLToPath(new URL('../../../../public/images/brand/og-cover.jpg', import.meta.url));
-const aboutStylesPath = new URL('./about/about.module.css', import.meta.url);
+const aboutStylesPath = new URL('./page-hero.module.css', import.meta.url);
 
 const shareCases = [
   [
@@ -167,6 +167,7 @@ describe('homepage share metadata and OG cover', () => {
       recommendationsHeaderStart,
       recommendationsHeaderEnd,
     );
+    const recommendationsBannerUrl = withBasePath('/images/brand/ciallo-banner.webp');
     const aboutEyebrowClass = heroMarkup.match(/<p class="([^"]+)"/)?.[1];
     const recommendationsEyebrowClass = recommendationsHeader.match(/<p class="([^"]+)"/)?.[1];
     const aboutTitleClass = heroMarkup.match(/<h1 class="([^"]+)"/)?.[1]?.split(' ');
@@ -196,6 +197,15 @@ describe('homepage share metadata and OG cover', () => {
     expect(artworkMarkup).toContain(`class="${aboutStyles.heroImage}"`);
     expect(artworkMarkup).toContain(`class="${aboutStyles.heroShade}"`);
     expect(artworkMarkup.endsWith('</div></div></div>')).toBe(true);
+    expect(recommendationsHeader).toContain(`class="${aboutStyles.hero} dark"`);
+    expect(recommendationsHeader).toContain(
+      `class="${aboutStyles.artwork}" aria-hidden="true"`,
+    );
+    expect(recommendationsHeader).toContain(encodeURIComponent(recommendationsBannerUrl));
+    expect(recommendationsHeader).toContain('alt=""');
+    expect(recommendationsHeader).toContain('object-position:75% 44%');
+    expect(recommendationsHeader).toContain(`class="${aboutStyles.artworkFrame}"`);
+    expect(recommendationsHeader).toContain(`class="${aboutStyles.heroShade}"`);
     expect(aboutEyebrowClass).toBe(recommendationsEyebrowClass);
     expect(aboutTitleClass?.filter((className) => className !== 'text-fd-foreground')).toEqual(
       recommendationsTitleClass,

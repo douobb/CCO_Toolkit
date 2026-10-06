@@ -16,6 +16,10 @@ import {
   type SharedUserInputsManagerMode,
 } from './shared-user-inputs-manager';
 import { SharedUserInputsProvider } from './shared-user-inputs-react';
+import {
+  getToolPlayerSettingsPathContext,
+  type SharedUserInputsFilter,
+} from './shared-user-inputs-filter';
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -61,6 +65,8 @@ async function mountManager(
   options: {
     readonly mode?: SharedUserInputsManagerMode;
     readonly idPrefix?: string;
+    readonly filter?: SharedUserInputsFilter;
+    readonly emptyMessage?: string;
   } = {},
 ) {
   const container = document.createElement('div');
@@ -78,6 +84,8 @@ async function mountManager(
           locale="zh-tw"
           mode={options.mode}
           idPrefix={options.idPrefix}
+          filter={options.filter}
+          emptyMessage={options.emptyMessage}
         />
       </SharedUserInputsProvider>,
     );
@@ -382,7 +390,7 @@ describe('Shared User Inputs market price currency display', () => {
     expect(mounted.container.querySelector<HTMLInputElement>(
       '#quick-editor-shared-price-tech-scrap',
     )?.value).toBe('929500');
-    expect(mounted.container.querySelector('#quick-editor-shared-cache-trash')).toBeNull();
+    expect(mounted.container.querySelector('#quick-editor-shared-cache-trash')).not.toBeNull();
     expect(getCurrencyButton(mounted.container, 'btc').getAttribute('aria-pressed')).toBe('true');
     expect(mounted.container.querySelector('#quick-editor-shared-price-tech-scrap-unit')?.textContent)
       .toBe('BTC/k');
@@ -403,7 +411,117 @@ describe('Shared User Inputs market price currency display', () => {
     expect(getCurrencyButton(mounted.container, 'btc').getAttribute('aria-pressed')).toBe('true');
   });
 
-  it('quick/full 共用表單 model、隔離欄位 ID，且 quick 不顯示全資料重設或快取欄位', async () => {
+  it('quick mode 可編輯並保存 cacheRates', async () => {
+    const mounted = await mountManager(defaultSharedUserInputs, { mode: 'quick' });
+    const cacheRate = mounted.container.querySelector<HTMLInputElement>('#shared-cache-trash');
+    if (!cacheRate) throw new Error('quick mode 的 cache rate 欄位不存在');
+
+    setInputValue(cacheRate, '12');
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(mounted.store.getSnapshot().economy.cacheRates).toEqual([
+      { id: 'trash', value: 12 },
+    ]);
+  });
+
+  it('scope 只隱藏非相關欄位，編輯與恢復可見市場欄位時保留其他 draft 資料', async () => {
+    const context = getToolPlayerSettingsPathContext('/en/tools/mining');
+    if (!context) throw new Error('mining tool settings scope is missing');
+
+    const initialSnapshot: SharedUserInputs = {
+      ...defaultSharedUserInputs,
+      progression: {
+        player: { level: 120 },
+        skills: [
+          { id: 'mining-skill', level: 80 },
+          { id: 'printing-rank', level: 50 },
+        ],
+      },
+      economy: {
+        ...defaultSharedUserInputs.economy,
+        prices: [
+          { itemId: 'hash', currencyId: 'ai', amount: 42 },
+          { itemId: 'supply-crate-gang', currencyId: 'ai', amount: 17 },
+        ],
+        exchangeRates: [{ id: 'btc-per-ai', value: 100 }],
+        cacheRates: [{ id: 'rare', value: 5 }],
+      },
+      equipment: { ...defaultSharedUserInputs.equipment, armor: 9 },
+    };
+    const mounted = await mountManager(initialSnapshot, {
+      mode: 'quick',
+      filter: context.relatedFilter,
+    });
+
+    expect(mounted.container.querySelector('#shared-level-level')).not.toBeNull();
+    expect(mounted.container.querySelector('#shared-level-mining-skill')).not.toBeNull();
+    expect(mounted.container.querySelector('#shared-level-printing-rank')).toBeNull();
+    expect(mounted.container.querySelector('#shared-price-hash')).not.toBeNull();
+    expect(mounted.container.querySelector('#shared-price-supply-crate-gang')).toBeNull();
+    expect(mounted.container.querySelector('#shared-cache-rare')).toBeNull();
+    expect(mounted.container.querySelector('#shared-equipment-armor')).toBeNull();
+
+    const miningLevel = mounted.container.querySelector<HTMLInputElement>(
+      '#shared-level-mining-skill',
+    );
+    if (!miningLevel) throw new Error('mining skill field is missing');
+    setInputValue(miningLevel, '81');
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const restoreButton = [...mounted.container.querySelectorAll('button')]
+      .find((button) => button.textContent?.includes(getMessages('zh-tw').settingsPage.restorePrices));
+    if (!(restoreButton instanceof HTMLButtonElement)) {
+      throw new Error('找不到恢復物價預設值按鈕');
+    }
+    await click(restoreButton);
+
+    const saved = mounted.store.getSnapshot();
+    expect(saved.progression.skills).toContainEqual({ id: 'mining-skill', level: 81 });
+    expect(saved.progression.skills).toContainEqual({ id: 'printing-rank', level: 50 });
+    expect(saved.equipment.armor).toBe(9);
+    expect(saved.economy.prices).toContainEqual({
+      itemId: 'supply-crate-gang',
+      currencyId: 'ai',
+      amount: 17,
+    });
+    expect(saved.economy.cacheRates).toEqual([{ id: 'rare', value: 5 }]);
+    expect(saved.economy.exchangeRates).toEqual([]);
+  });
+
+  it('相關檢視仍驗證被隱藏技能與玩家等級的完整相依關係', async () => {
+    const context = getToolPlayerSettingsPathContext('/en/tools/mining');
+    if (!context) throw new Error('mining tool settings scope is missing');
+    const initialSnapshot: SharedUserInputs = {
+      ...defaultSharedUserInputs,
+      progression: {
+        player: { level: 100 },
+        skills: [{ id: 'printing-rank', level: 80 }],
+      },
+    };
+    const mounted = await mountManager(initialSnapshot, {
+      mode: 'quick',
+      filter: context.relatedFilter,
+    });
+    const savedSnapshot = mounted.store.getSnapshot();
+    const playerLevel = mounted.container.querySelector<HTMLInputElement>('#shared-level-level');
+    if (!playerLevel) throw new Error('player level field is missing');
+
+    setInputValue(playerLevel, '50');
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(mounted.store.getSnapshot()).toBe(savedSnapshot);
+    expect(mounted.container.querySelector('[role="alert"]')?.textContent)
+      .toContain(getMessages('zh-tw').settingsPage.validationSummary);
+    expect(mounted.container.querySelector('#shared-level-printing-rank')).toBeNull();
+  });
+
+  it('quick/full 共用表單 model 與隔離欄位 ID，quick 不顯示全資料重設', async () => {
     const container = document.createElement('div');
     document.body.append(container);
     const store = createSharedUserInputsStore({ storage: null });
@@ -442,7 +560,7 @@ describe('Shared User Inputs market price currency display', () => {
     expect(container.querySelector('#full-editor-shared-level-level')).not.toBeNull();
     expect(container.querySelector('#quick-editor-shared-level-level')).not.toBeNull();
     expect(container.querySelector('#full-editor-shared-cache-trash')).not.toBeNull();
-    expect(container.querySelector('#quick-editor-shared-cache-trash')).toBeNull();
+    expect(container.querySelector('#quick-editor-shared-cache-trash')).not.toBeNull();
     expect(fullManager?.textContent).toContain(resetTitle);
     expect(quickManager?.textContent).not.toContain(resetTitle);
   });

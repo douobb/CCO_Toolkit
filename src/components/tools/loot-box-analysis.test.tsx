@@ -563,4 +563,65 @@ describe('Loot box analysis calculator', () => {
       await unmountLootBox(mounted);
     }
   });
+
+  it('重設清空表單並將紀錄表回到第一頁，但保留所有開箱紀錄', async () => {
+    window.localStorage.clear();
+    const storedState = createStoredLootBoxStateWithRecords(21);
+    saveToolState('loot-box-analysis', storedState);
+    const mounted = await mountLootBox();
+    const labels = getMessages('zh-tw').tools.lootBoxAnalysis;
+    try {
+      const getRows = () => mounted.container.querySelectorAll(
+        'section[aria-labelledby="loot-box-analysis-records-title"] tbody tr',
+      );
+      const getButton = (label: string) => mounted.container.querySelector<HTMLButtonElement>(
+        `button[aria-label="${label}"]`,
+      );
+      const boxType = mounted.container.querySelector<HTMLSelectElement>(
+        '#loot-box-analysis-box-type',
+      )!;
+
+      await act(async () => {
+        getButton(labels.nextPage)?.click();
+        await Promise.resolve();
+      });
+      expect(mounted.container.querySelector('[role="status"]')?.textContent)
+        .toContain('第 2 / 2 頁');
+
+      await act(async () => {
+        setSelectValue(boxType, 'white');
+        await Promise.resolve();
+      });
+      await act(async () => {
+        setInputValue(mounted.container.querySelector<HTMLInputElement>(
+          '#loot-box-analysis-openings',
+        )!, '1');
+        setInputValue(mounted.container.querySelector<HTMLInputElement>(
+          '#loot-box-analysis-item-hash',
+        )!, '2');
+        await Promise.resolve();
+      });
+      expect(boxType.value).toBe('white');
+      expect(mounted.container.querySelector<HTMLInputElement>(
+        '#loot-box-analysis-item-hash',
+      )?.value).toBe('2');
+
+      await act(async () => {
+        mounted.container.querySelector<HTMLButtonElement>('[data-tool-reset=""]')?.click();
+        await Promise.resolve();
+      });
+
+      expect(boxType.value).toBe('');
+      expect(mounted.container.querySelector<HTMLInputElement>(
+        '#loot-box-analysis-openings',
+      )?.value).toBe('');
+      expect(mounted.container.querySelector('#loot-box-analysis-item-hash')).toBeNull();
+      expect(getRows()).toHaveLength(20);
+      expect(mounted.container.querySelector('[role="status"]')?.textContent)
+        .toContain('第 1 / 2 頁');
+      expect(loadToolState<LootBoxAnalysisState>('loot-box-analysis')).toEqual(storedState);
+    } finally {
+      await unmountLootBox(mounted);
+    }
+  });
 });

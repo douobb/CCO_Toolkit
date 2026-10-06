@@ -7,7 +7,7 @@ tags:
   - index
 order: 0
 date: 2026-08-29
-updated: 2026-09-09
+updated: 2026-10-06
 locale: en
 ---
 
@@ -24,42 +24,35 @@ locale: en
 
 ## Input locations
 
-Tool inputs are divided into two groups based on how often they are adjusted:
+The sidebars of all eight tools currently contain only the table of contents (TOC); inputs are available in these two places:
 
 <DataTable
   ariaLabel="Tool input locations"
   rowHeader
   stickyFirstColumn
-  tableClassName="min-w-[70rem] table-fixed"
+  tableClassName="min-w-[48rem] table-fixed"
   columns={[
-    { label: 'Input type', width: '8rem' },
+    { label: 'Input type', width: '10rem' },
     { label: 'Purpose', width: '16rem' },
-    { label: 'Wide desktop layout', width: '22rem' },
-    { label: 'Mobile or narrow layout', width: '22rem' },
+    { label: 'Location', width: '22rem' },
   ]}
   rows={[
     [
       'Primary inputs',
-      'Values adjusted frequently and used directly in the current calculation',
-      <>In the <strong>Primary inputs</strong> section of the main tool area</>,
-      <>In the same <strong>Primary inputs</strong> section of the main tool area</>,
+      'Adjust this calculation’s inputs',
+      'Main input section on the tool page',
     ],
     [
-      'Low-frequency inputs',
-      'Prices, buffs, and calculation settings that change less often',
-      <>In the <strong>Settings</strong> tab of the right sidebar</>,
-      'Select the settings icon in top bar to open the bottom panel',
-    ],
-    [
-      'Player & calculation settings',
-      'Manage player, equipment, and calculation data that multiple tools can reuse',
-      'At the bottom of the left sidebar, above the language selector',
-      "Click the player and gear icons in the top CCO Toolkit bar; this entry is separate from an individual tool's gear settings icon",
+      'Shared settings',
+      'Manage player, equipment, and prices',
+      'Click the “Player & calculation settings” icon',
     ],
   ]}
 />
 
-The layout changes according to the main content area's actual available width, so a narrow desktop window may also use the mobile settings entry point.
+Fields marked “Shared” sync with shared settings, and changes apply to other tools.
+
+**Reset this tool** restores only that tool's trial inputs, mode, default buffs, or form and filter state; it does not change shared data or clear backpack inventory or loot-box records.
 
 ## Data storage
 

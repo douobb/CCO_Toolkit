@@ -16,7 +16,7 @@ import { getAcceptedContributionRecords } from '@/lib/site-content';
 import { siteOgCover } from '@/lib/site-brand';
 import { withBasePath } from '@/lib/site-paths';
 
-import styles from './about.module.css';
+import styles from '../page-hero.module.css';
 
 type AboutRouteParams = { lang: string };
 

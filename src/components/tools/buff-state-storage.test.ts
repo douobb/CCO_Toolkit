@@ -54,7 +54,6 @@ describe('工具 Buff 狀態 storage', () => {
 
     expectStored('black-market', {
       printingLevel: '1',
-      bargainPercent: '0',
       btcBuffPercent: '100',
       trashAmount: '1000',
       commonAmount: '1000',
@@ -65,7 +64,6 @@ describe('工具 Buff 狀態 storage', () => {
       searchLevel: '1',
       printingLevel: '1',
       miningLevel: '1',
-      bargainPercent: '0',
       btcBuffPercent: '100',
       comparisonMode: 'per-minute',
       mixedCrushingMode: 'recommended',
@@ -90,7 +88,6 @@ describe('工具 Buff 狀態 storage', () => {
     const storage = new MemoryStorage();
     const blackMarketState = {
       printingLevel: '1',
-      bargainPercent: '0',
       btcBuffPercent: '40',
       trashAmount: '1000',
       commonAmount: '1000',
@@ -101,7 +98,6 @@ describe('工具 Buff 狀態 storage', () => {
       searchLevel: '1',
       printingLevel: '1',
       miningLevel: '1',
-      bargainPercent: '0',
       btcBuffPercent: '80',
       comparisonMode: 'per-minute',
     };

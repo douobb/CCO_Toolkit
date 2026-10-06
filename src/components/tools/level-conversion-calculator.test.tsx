@@ -8,14 +8,12 @@ import { getMessages } from '@/lib/translations';
 
 import {
   calculateLevelConversionTool,
-  applyLevelConversionSharedValues,
+  applyLevelConversionPlayerValues,
   createLevelConversionValues,
   LevelConversionCalculator,
-  LevelConversionSettingsPanel,
   LevelConversionToolProvider,
   normalizeLevelConversionToolState,
   selectLevelConversionSharedValues,
-  updateLevelConversionSharedValue,
   type LevelConversionToolState,
 } from './level-conversion-calculator';
 
@@ -41,6 +39,9 @@ function defaultToolState(): LevelConversionToolState {
 
 function defaultPrices() {
   return {
+    levelType: 'level',
+    currentLevel: '1',
+    targetLevel: '1',
     aiPerHash: '1.85',
     aiPerTechScrap: '110',
     aiPerMedicalTechParts: '50',
@@ -62,7 +63,10 @@ describe('Level conversion calculator presentation', () => {
     expect(markup).toContain('id="level-conversion-type"');
     expect(markup).toContain('id="level-conversion-current-level"');
     expect(markup).toContain('id="level-conversion-target-level"');
-    expect(markup).toContain('從共用設定填入');
+    expect(markup).toContain('id="level-conversion-cortex-bonus"');
+    expect(markup).toContain('aria-valuenow="100"');
+    expect(markup).toContain('帶入玩家等級');
+    expect(markup).toContain('data-tool-reset=""');
     expect(markup).toContain('換算結果');
     expect(markup).toContain('分子列印等級');
     expect(markup).toContain('data-result-layout="table"');
@@ -81,36 +85,26 @@ describe('Level conversion calculator presentation', () => {
     expect(markup).not.toContain('資料版本');
   });
 
-  it('設定面板提供等級換算需要的完整經濟欄位與經驗值加成', () => {
+  it('物價仍不重複出現在主要輸入，BUFF 與等級欄位同卡呈現', () => {
     const labels = getMessages('zh-tw').tools.levelConversion;
     const markup = renderLevelConversion(
-      <LevelConversionSettingsPanel
-        labels={labels}
-        locale="zh-tw"
-        idPrefix="test-level-settings"
-      />,
+      <LevelConversionCalculator labels={labels} locale="zh-tw" />,
     );
 
-    expect(markup).toContain('id="test-level-settings-hash-price"');
-    expect(markup).toContain('id="test-level-settings-tech-scrap-price"');
-    expect(markup).toContain('id="test-level-settings-medical-tech-parts-price"');
-    expect(markup).toContain('id="test-level-settings-ammunition-tech-parts-price"');
-    expect(markup).toContain('id="test-level-settings-military-ammunition-tech-parts-price"');
-    expect(markup).toContain('id="test-level-settings-trash-cache-rate"');
-    expect(markup).toContain('id="test-level-settings-btc-per-ai"');
-    expect(markup).toContain('id="test-level-settings-cortex-bonus"');
-    expect(markup).toContain('aria-valuenow="100"');
-    expect(markup).not.toContain('沿用共用值');
-    expect(markup).not.toContain('本工具覆寫');
+    expect(markup).toContain('id="level-conversion-cortex-bonus"');
+    expect(markup).toContain('id="level-conversion-type"');
+    expect(markup).toContain('id="level-conversion-current-level"');
+    expect(markup).toContain('id="level-conversion-target-level"');
+    expect(markup).not.toContain('hash-price');
+    expect(markup).not.toContain('cache-rate');
+    expect(markup).not.toContain('btc-per-ai');
+    expect(markup).not.toContain('level-conversion-settings');
   });
 
-  it('將工具本地狀態與經濟設定草稿組合成計算輸入', () => {
+  it('將本地等級試算與目前共享物價組合成計算輸入', () => {
     expect(createLevelConversionValues(defaultToolState(), defaultPrices())).toEqual({
-      levelType: 'printing-rank',
-      currentLevel: '350',
-      targetLevel: '400',
-      cortexBonusPercent: '80',
       ...defaultPrices(),
+      ...defaultToolState(),
     });
   });
 
@@ -147,7 +141,7 @@ describe('Level conversion calculator presentation', () => {
     });
   });
 
-  it('缺少 Buff 欄位時預設 100，既有值保留且填入共用設定不覆蓋 Buff', () => {
+  it('缺少 Buff 欄位時預設 100，帶入玩家等級不覆蓋本工具 Buff', () => {
     const missingBuff = {
       levelType: 'level',
       currentLevel: '1',
@@ -157,44 +151,15 @@ describe('Level conversion calculator presentation', () => {
     expect(normalizeLevelConversionToolState({ ...missingBuff, cortexBonusPercent: '100' })?.cortexBonusPercent)
       .toBe('100');
 
-    const applied = applyLevelConversionSharedValues(
-      { ...missingBuff, cortexBonusPercent: '40' },
+    const applied = applyLevelConversionPlayerValues(
+      { ...normalizeLevelConversionToolState(missingBuff)!, cortexBonusPercent: '40' },
       selectLevelConversionSharedValues(defaultSharedUserInputs),
     );
     expect(applied.cortexBonusPercent).toBe('40');
+    expect(applied.currentLevel).toBe('1');
   });
 
-  it('將有效物價、快取換算與匯率回寫共用庫，回到預設值時移除覆寫', () => {
-    const withHashOverride = updateLevelConversionSharedValue(
-      defaultSharedUserInputs,
-      'aiPerHash',
-      2,
-    );
-    expect(withHashOverride.economy.prices).toEqual([
-      { itemId: 'hash', currencyId: 'ai', amount: 2 },
-    ]);
-
-    const restoredHash = updateLevelConversionSharedValue(withHashOverride, 'aiPerHash', 1.85);
-    expect(restoredHash.economy.prices).toEqual([]);
-
-    const withCacheOverride = updateLevelConversionSharedValue(
-      defaultSharedUserInputs,
-      'trashCachePerAi',
-      12,
-    );
-    expect(withCacheOverride.economy.cacheRates).toEqual([
-      { id: 'trash', value: 12 },
-    ]);
-
-    const restoredCache = updateLevelConversionSharedValue(
-      withCacheOverride,
-      'trashCachePerAi',
-      9,
-    );
-    expect(restoredCache.economy.cacheRates).toEqual([]);
-  });
-
-  it('拒絕小數等級、反向目標與非整數換算率', () => {
+  it('拒絕小數等級與反向目標；共享價格取自提供的快照', () => {
     const decimalLevel = calculateLevelConversionTool(
       createLevelConversionValues(
         { ...defaultToolState(), currentLevel: '350.5' },
@@ -214,14 +179,19 @@ describe('Level conversion calculator presentation', () => {
     expect(reversedLevel.inputs).toBeNull();
     expect(reversedLevel.errors.targetLevel).toBe('target');
 
-    const invalidCacheRate = calculateLevelConversionTool(
-      createLevelConversionValues(
-        defaultToolState(),
-        { ...defaultPrices(), trashCachePerAi: '9.5' },
-      ),
+    const snapshotWithCacheRate = {
+      ...defaultSharedUserInputs,
+      economy: {
+        ...defaultSharedUserInputs.economy,
+        cacheRates: [{ id: 'trash' as const, value: 12 }],
+      },
+    };
+    const withSharedRate = calculateLevelConversionTool(
+      createLevelConversionValues(defaultToolState(), selectLevelConversionSharedValues(snapshotWithCacheRate)),
+      snapshotWithCacheRate,
     );
-    expect(invalidCacheRate.inputs).toBeNull();
-    expect(invalidCacheRate.errors.trashCachePerAi).toBe('rate');
+    expect(withSharedRate.inputs).not.toBeNull();
+    expect(withSharedRate.result).not.toBeNull();
   });
 
   it('以 progression methods 產生每個方法的換算結果', () => {

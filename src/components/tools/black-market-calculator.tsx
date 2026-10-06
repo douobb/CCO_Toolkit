@@ -4,11 +4,9 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useState,
 } from 'react';
-import { Download, RotateCcw } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import type { ContextualDocsPageProps } from '@/components/context';
@@ -20,7 +18,8 @@ import {
   ToolBuffSliderField,
   ToolInputField,
   ToolPage,
-  ToolPresetButton,
+  ToolPrimaryActions,
+  ToolSharedNumberField,
   ToolState,
 } from '@/components/tools';
 import {
@@ -33,10 +32,6 @@ import {
   blackMarketQualityCatalog,
   type BlackMarketQualityId,
 } from '@/data/game/black-market';
-import {
-  economyDataSet,
-  getMarketCacheRateDefinition,
-} from '@/data/game/economy';
 import { getProgressionLevelDefinition } from '@/data/game/progression';
 import {
   BLACK_MARKET_LEVEL_MAX,
@@ -56,43 +51,37 @@ import type { Locale } from '@/lib/i18n';
 import { createNumberFormatter, type NumberFormatter } from '@/lib/number-formatting';
 import {
   clearToolState,
-  defaultSharedUserInputs,
   type SharedUserInputs,
 } from '@/lib/storage';
 import { useToolStateStorage } from '@/lib/storage/use-tool-state';
+import {
+  updateSharedCacheRate,
+  updateSharedEquipmentNumber,
+  updateSharedExchangeRate,
+} from './shared-input-updates';
+import { getSharedFieldPresentation } from './shared-field-presentation';
 
 export interface BlackMarketToolLabels {
-  readonly settingsTab: string;
-  readonly settingsTitle: string;
-  readonly openSettings: string;
-  readonly closeSettings: string;
   readonly primaryInputs: string;
   readonly printingLevel: string;
-  readonly bargainPercent: string;
+  readonly prices: string;
   readonly btcBuffPercent: string;
   readonly levelPlaceholder: string;
   readonly levelRange: string;
-  readonly bargainRange: string;
   readonly buffRange: string;
   readonly levelUnit: string;
   readonly percentUnit: string;
   readonly amounts: string;
   readonly cacheAmount: string;
   readonly amountUnit: string;
-  readonly prices: string;
-  readonly cacheRate: string;
-  readonly cacheRateUnit: string;
-  readonly btcPerAi: string;
-  readonly btcPerAiUnit: string;
   readonly amountRange: string;
-  readonly rateRange: string;
   readonly reset: string;
-  readonly fillShared: string;
+  readonly fillPlayer: string;
   readonly validationSummary: string;
   readonly validationLevel: string;
   readonly validationBargain: string;
-  readonly validationAmount: string;
   readonly validationRate: string;
+  readonly validationAmount: string;
   readonly validationBuff: string;
   readonly noResult: string;
   readonly noResultHint: string;
@@ -133,7 +122,6 @@ export type BlackMarketErrors = Partial<Record<BlackMarketField, BlackMarketErro
 
 export interface BlackMarketToolState {
   readonly printingLevel: string;
-  readonly bargainPercent: string;
   readonly btcBuffPercent: string;
   readonly trashAmount: string;
   readonly commonAmount: string;
@@ -141,19 +129,19 @@ export interface BlackMarketToolState {
   readonly rareAmount: string;
 }
 
-type BlackMarketPriceField =
+type BlackMarketSharedRateField =
   | 'trashCachePerAi'
   | 'commonCachePerAi'
   | 'highQualityCachePerAi'
   | 'rareCachePerAi';
-type BlackMarketWritableField = BlackMarketPriceField | 'btcPerAi';
-type BlackMarketPriceValues = Pick<BlackMarketFormValues, BlackMarketWritableField>;
 export type BlackMarketSharedValues = Pick<
   BlackMarketFormValues,
   | 'printingLevel'
   | 'bargainPercent'
-  | BlackMarketWritableField
+  | BlackMarketSharedRateField
+  | 'btcPerAi'
 >;
+type BlackMarketToolField = keyof BlackMarketToolState;
 
 const blackMarketQualityToAmountField = {
   trash: 'trashAmount',
@@ -167,28 +155,12 @@ const blackMarketQualityToPriceField = {
   common: 'commonCachePerAi',
   'high-quality': 'highQualityCachePerAi',
   rare: 'rareCachePerAi',
-} as const satisfies Record<BlackMarketQualityId, BlackMarketPriceField>;
-
-const blackMarketPriceFieldToQuality = {
-  trashCachePerAi: 'trash',
-  commonCachePerAi: 'common',
-  highQualityCachePerAi: 'high-quality',
-  rareCachePerAi: 'rare',
-} as const satisfies Record<BlackMarketPriceField, BlackMarketQualityId>;
-
-const blackMarketPriceFields = [
-  'trashCachePerAi',
-  'commonCachePerAi',
-  'highQualityCachePerAi',
-  'rareCachePerAi',
-  'btcPerAi',
-] as const satisfies readonly BlackMarketWritableField[];
+} as const satisfies Record<BlackMarketQualityId, BlackMarketSharedRateField>;
 
 const defaultBlackMarketCacheAmount = '1000';
 
 const defaultBlackMarketToolState: BlackMarketToolState = {
   printingLevel: String(BLACK_MARKET_LEVEL_MIN),
-  bargainPercent: '0',
   btcBuffPercent: BUFF_PERCENT_DEFAULT_STRING,
   trashAmount: defaultBlackMarketCacheAmount,
   commonAmount: defaultBlackMarketCacheAmount,
@@ -220,64 +192,14 @@ export function selectBlackMarketSharedValues(
   };
 }
 
-/** 將共用設定帶入玩家／物價欄位；刻意不觸碰工具自己的 Buff。 */
-export function applyBlackMarketSharedValues(
+/** 將玩家等級帶入試算；保留 BUFF 與本工具數量。 */
+export function applyBlackMarketPlayerValues(
   current: BlackMarketToolState,
   shared: BlackMarketSharedValues,
 ): BlackMarketToolState {
   return {
     ...current,
     printingLevel: shared.printingLevel,
-    bargainPercent: shared.bargainPercent,
-  };
-}
-
-/** 將黑市工具中的有效快取換算／匯率回寫 Shared User Inputs。 */
-export function updateBlackMarketSharedValue(
-  snapshot: SharedUserInputs,
-  field: BlackMarketWritableField,
-  amount: number,
-): SharedUserInputs {
-  if (!Number.isSafeInteger(amount) || amount < 1 || amount > Number.MAX_SAFE_INTEGER) {
-    return snapshot;
-  }
-
-  if (field === 'btcPerAi') {
-    const definition = economyDataSet.payload.exchangeRates.find(
-      (rate) => rate.id === 'btc-per-ai',
-    );
-    if (!definition) return snapshot;
-
-    const ratesWithoutCurrent = snapshot.economy.exchangeRates.filter(
-      (rate) => rate.id !== 'btc-per-ai',
-    );
-
-    return {
-      ...snapshot,
-      economy: {
-        ...snapshot.economy,
-        exchangeRates: amount === definition.defaultValue
-          ? ratesWithoutCurrent
-          : [...ratesWithoutCurrent, { id: 'btc-per-ai', value: amount }],
-      },
-    };
-  }
-
-  const cacheId = blackMarketPriceFieldToQuality[field];
-
-  const definition = getMarketCacheRateDefinition(cacheId);
-  const ratesWithoutCurrent = snapshot.economy.cacheRates.filter(
-    (rate) => rate.id !== cacheId,
-  );
-
-  return {
-    ...snapshot,
-    economy: {
-      ...snapshot.economy,
-      cacheRates: amount === definition.defaultValue
-        ? ratesWithoutCurrent
-        : [...ratesWithoutCurrent, { id: cacheId, value: amount }],
-    },
   };
 }
 
@@ -294,9 +216,8 @@ function isBlackMarketToolState(value: unknown): value is BlackMarketToolState {
   }
 
   const keys = Object.keys(value);
-  return keys.length === 7 && keys.every((key) =>
+  return keys.length === 6 && keys.every((key) =>
     key === 'printingLevel' ||
-    key === 'bargainPercent' ||
     key === 'btcBuffPercent' ||
     key === 'trashAmount' ||
     key === 'commonAmount' ||
@@ -312,7 +233,6 @@ export function normalizeBlackMarketToolState(
 
   const requiredFields = [
     'printingLevel',
-    'bargainPercent',
     'trashAmount',
     'commonAmount',
     'highQualityAmount',
@@ -320,9 +240,16 @@ export function normalizeBlackMarketToolState(
   ] as const;
   const keys = Object.keys(value);
   if (
-    (keys.length !== requiredFields.length && keys.length !== requiredFields.length + 1) ||
-    !keys.every((key) => key === 'btcBuffPercent' || requiredFields.includes(key as typeof requiredFields[number])) ||
-    requiredFields.some((field) => typeof value[field] !== 'string')
+    keys.length < requiredFields.length ||
+    keys.length > requiredFields.length + 2 ||
+    !keys.every((key) =>
+      key === 'btcBuffPercent' ||
+      key === 'bargainPercent' ||
+      requiredFields.includes(key as typeof requiredFields[number])
+    ) ||
+    requiredFields.some((field) => typeof value[field] !== 'string') ||
+    (Object.prototype.hasOwnProperty.call(value, 'bargainPercent') &&
+      typeof value.bargainPercent !== 'string')
   ) {
     return undefined;
   }
@@ -334,7 +261,6 @@ export function normalizeBlackMarketToolState(
 
   return {
     printingLevel: value.printingLevel as string,
-    bargainPercent: value.bargainPercent as string,
     btcBuffPercent,
     trashAmount: value.trashAmount as string,
     commonAmount: value.commonAmount as string,
@@ -345,11 +271,11 @@ export function normalizeBlackMarketToolState(
 
 export function createBlackMarketValues(
   toolState: BlackMarketToolState,
-  priceDrafts: BlackMarketPriceValues,
+  sharedValues: BlackMarketSharedValues,
 ): BlackMarketFormValues {
   return {
+    ...sharedValues,
     ...toolState,
-    ...priceDrafts,
   };
 }
 
@@ -439,8 +365,8 @@ interface BlackMarketContextValue {
   readonly errors: BlackMarketErrors;
   readonly inputs: BlackMarketInputs | null;
   readonly result: readonly BlackMarketQualityResult[] | null;
-  readonly setValue: (field: BlackMarketField, value: string) => void;
-  readonly fillFromShared: () => void;
+  readonly setValue: (field: BlackMarketToolField, value: string) => void;
+  readonly fillPlayer: () => void;
   readonly reset: () => void;
 }
 
@@ -469,99 +395,25 @@ export function BlackMarketToolProvider({ children }: { children: ReactNode }) {
         return {
           ...defaultBlackMarketToolState,
           printingLevel: shared.printingLevel,
-          bargainPercent: shared.bargainPercent,
         };
       },
     },
-  );
-  const [priceDrafts, setPriceDrafts] = useState<BlackMarketPriceValues>(() => {
-    const defaults = selectBlackMarketSharedValues(defaultSharedUserInputs);
-    return {
-      trashCachePerAi: defaults.trashCachePerAi,
-      commonCachePerAi: defaults.commonCachePerAi,
-      highQualityCachePerAi: defaults.highQualityCachePerAi,
-      rareCachePerAi: defaults.rareCachePerAi,
-      btcPerAi: defaults.btcPerAi,
-    };
-  });
-  const [dirtyFields, setDirtyFields] = useState<ReadonlySet<BlackMarketWritableField>>(
-    () => new Set(),
   );
   const sharedValues = useMemo(
     () => selectBlackMarketSharedValues(sharedSnapshot),
     [sharedSnapshot],
   );
 
-  useEffect(() => {
-    let cancelled = false;
-    queueMicrotask(() => {
-      if (cancelled) return;
-
-      setPriceDrafts((current) => {
-        let next: BlackMarketPriceValues | null = null;
-
-        for (const field of blackMarketPriceFields) {
-          if (!dirtyFields.has(field) && current[field] !== sharedValues[field]) {
-            next = { ...(next ?? current), [field]: sharedValues[field] };
-          }
-        }
-
-        return next ?? current;
-      });
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [dirtyFields, sharedValues]);
-
   const setValue = useCallback(
-    (field: BlackMarketField, value: string) => {
-      if (field === 'trashCachePerAi' ||
-        field === 'commonCachePerAi' ||
-        field === 'highQualityCachePerAi' ||
-        field === 'rareCachePerAi' ||
-        field === 'btcPerAi') {
-        setPriceDrafts((current) => ({ ...current, [field]: value }));
-        setDirtyFields((current) => {
-          const next = new Set(current);
-          next.add(field);
-          return next;
-        });
-
-        const parsed = parseBlackMarketPriceValue(value);
-        if (parsed === null) return;
-
-        const accepted = sharedStore.update((current) =>
-          updateBlackMarketSharedValue(current, field, parsed),
-        );
-        if (!accepted) return;
-
-        setDirtyFields((current) => {
-          if (!current.has(field)) return current;
-          const next = new Set(current);
-          next.delete(field);
-          return next;
-        });
-        return;
-      }
-
+    (field: BlackMarketToolField, value: string) => {
       setToolState((current) => ({ ...current, [field]: value }));
     },
-    [setToolState, sharedStore],
+    [setToolState],
   );
 
-  const fillFromShared = useCallback(() => {
+  const fillPlayer = useCallback(() => {
     const latestSharedValues = selectBlackMarketSharedValues(sharedStore.getSnapshot());
-    setToolState((current) => applyBlackMarketSharedValues(current, latestSharedValues));
-    setPriceDrafts({
-      trashCachePerAi: latestSharedValues.trashCachePerAi,
-      commonCachePerAi: latestSharedValues.commonCachePerAi,
-      highQualityCachePerAi: latestSharedValues.highQualityCachePerAi,
-      rareCachePerAi: latestSharedValues.rareCachePerAi,
-      btcPerAi: latestSharedValues.btcPerAi,
-    });
-    setDirtyFields(new Set());
+    setToolState((current) => applyBlackMarketPlayerValues(current, latestSharedValues));
   }, [setToolState, sharedStore]);
 
   const reset = useCallback(() => {
@@ -569,26 +421,17 @@ export function BlackMarketToolProvider({ children }: { children: ReactNode }) {
     const latestSharedValues = selectBlackMarketSharedValues(sharedStore.getSnapshot());
     setToolState({
       printingLevel: latestSharedValues.printingLevel,
-      bargainPercent: latestSharedValues.bargainPercent,
       btcBuffPercent: defaultBlackMarketToolState.btcBuffPercent,
       trashAmount: defaultBlackMarketCacheAmount,
       commonAmount: defaultBlackMarketCacheAmount,
       highQualityAmount: defaultBlackMarketCacheAmount,
       rareAmount: defaultBlackMarketCacheAmount,
     });
-    setPriceDrafts({
-      trashCachePerAi: latestSharedValues.trashCachePerAi,
-      commonCachePerAi: latestSharedValues.commonCachePerAi,
-      highQualityCachePerAi: latestSharedValues.highQualityCachePerAi,
-      rareCachePerAi: latestSharedValues.rareCachePerAi,
-      btcPerAi: latestSharedValues.btcPerAi,
-    });
-    setDirtyFields(new Set());
   }, [setToolState, sharedStore]);
 
   const values = useMemo(
-    () => createBlackMarketValues(toolState, priceDrafts),
-    [priceDrafts, toolState],
+    () => createBlackMarketValues(toolState, sharedValues),
+    [sharedValues, toolState],
   );
   const calculation = useMemo(() => calculateBlackMarketTool(values), [values]);
   const contextValue = useMemo(
@@ -598,10 +441,10 @@ export function BlackMarketToolProvider({ children }: { children: ReactNode }) {
       inputs: calculation.inputs,
       result: calculation.result,
       setValue,
-      fillFromShared,
+      fillPlayer,
       reset,
     }),
-    [calculation, fillFromShared, reset, setValue, values],
+    [calculation, fillPlayer, reset, setValue, values],
   );
 
   return (
@@ -625,9 +468,7 @@ function getErrorMessage(
 ) {
   const error = errors[field];
   if (error === 'level') return labels.validationLevel;
-  if (error === 'bargain') return labels.validationBargain;
   if (error === 'amount') return labels.validationAmount;
-  if (error === 'rate') return labels.validationRate;
   if (error === 'buff') return labels.validationBuff;
   return undefined;
 }
@@ -643,7 +484,7 @@ function BlackMarketPrimaryField({
   placeholder,
   labels,
 }: {
-  field: Exclude<BlackMarketField, BlackMarketWritableField | 'btcBuffPercent'>;
+  field: Exclude<BlackMarketToolField, 'btcBuffPercent'>;
   id: string;
   label: string;
   unit: string;
@@ -674,6 +515,84 @@ function BlackMarketPrimaryField({
   );
 }
 
+function BlackMarketBargainField({ locale }: { locale: Locale }) {
+  const { values } = useBlackMarketTool();
+  const store = useSharedUserInputsStore();
+  const sharedField = getSharedFieldPresentation(locale);
+
+  return (
+    <ToolSharedNumberField
+      id="black-market-bargain-percent"
+      label={sharedField.bargain.label}
+      sharedLabel={sharedField.sharedLabel}
+      value={values.bargainPercent}
+      min={0}
+      max={40}
+      integer
+      unit={sharedField.bargain.unit}
+      range={sharedField.bargain.range}
+      invalidValueMessage={sharedField.invalidValueMessage}
+      onValueChange={(value) => store.update((current) =>
+        updateSharedEquipmentNumber(current, 'bargainPercent', value),
+      )}
+    />
+  );
+}
+
+function BlackMarketExchangeRateField({ locale }: { locale: Locale }) {
+  const { values } = useBlackMarketTool();
+  const store = useSharedUserInputsStore();
+  const sharedField = getSharedFieldPresentation(locale);
+
+  return (
+    <ToolSharedNumberField
+      id="black-market-btc-per-ai"
+      label={sharedField.exchangeRate.label}
+      sharedLabel={sharedField.sharedLabel}
+      value={values.btcPerAi}
+      min={1}
+      integer
+      unit={sharedField.exchangeRate.unit}
+      range={sharedField.exchangeRate.range}
+      invalidValueMessage={sharedField.invalidValueMessage}
+      onValueChange={(value) => store.update((current) =>
+        updateSharedExchangeRate(current, value),
+      )}
+    />
+  );
+}
+
+function BlackMarketCacheRateField({
+  qualityId,
+  locale,
+}: {
+  qualityId: BlackMarketQualityId;
+  locale: Locale;
+}) {
+  const { values } = useBlackMarketTool();
+  const store = useSharedUserInputsStore();
+  const sharedFields = getSharedFieldPresentation(locale);
+  const sharedField = sharedFields.cacheRate(qualityId);
+  const field = blackMarketQualityToPriceField[qualityId];
+
+  return (
+    <ToolSharedNumberField
+      id={`black-market-${qualityId}-cache-rate`}
+      label={sharedField.label}
+      sharedLabel={sharedFields.sharedLabel}
+      value={values[field]}
+      min={1}
+      integer
+      unit={sharedField.unit}
+      range={sharedField.range}
+      invalidValueMessage={sharedFields.invalidValueMessage}
+      onValueChange={(value) => store.update((current) =>
+        updateSharedCacheRate(current, qualityId, value),
+      )}
+    />
+  );
+}
+
 function BlackMarketBuffField({
   id,
   label,
@@ -695,92 +614,6 @@ function BlackMarketBuffField({
       onValueChange={(value) => setValue('btcBuffPercent', String(value))}
       error={getErrorMessage('btcBuffPercent', errors, labels)}
     />
-  );
-}
-
-function BlackMarketRateField({
-  field,
-  id,
-  label,
-  unit,
-  labels,
-}: {
-  field: BlackMarketWritableField;
-  id: string;
-  label: string;
-  unit: string;
-  labels: BlackMarketToolLabels;
-}) {
-  const { values, errors, setValue } = useBlackMarketTool();
-
-  return (
-    <ToolInputField
-      id={id}
-      label={label}
-      type="number"
-      inputMode="numeric"
-      min={1}
-      step="1"
-      value={values[field]}
-      onChange={(event) => setValue(field, event.target.value)}
-      error={getErrorMessage(field, errors, labels)}
-      range={labels.rateRange}
-      unit={unit}
-    />
-  );
-}
-
-export function BlackMarketSettingsPanel({
-  labels,
-  locale,
-  idPrefix = 'black-market-settings',
-}: {
-  labels: BlackMarketToolLabels;
-  locale: Locale;
-  idPrefix?: string;
-}) {
-  const { reset } = useBlackMarketTool();
-
-  return (
-    <div className="flex h-full flex-col gap-6 p-4">
-      <div>
-        <h2 className="font-semibold text-foreground">{labels.settingsTitle}</h2>
-      </div>
-
-      <div className="space-y-4">
-        <h3 className="text-sm font-medium text-foreground">{labels.amounts}</h3>
-        <div className="space-y-5">
-          {blackMarketQualityCatalog.map((quality) => {
-            const field = blackMarketQualityToAmountField[quality.id];
-            const qualityLabel = quality.labels[locale];
-
-            return (
-              <BlackMarketPrimaryField
-                key={quality.id}
-                field={field}
-                id={`${idPrefix}-${quality.id}-amount`}
-                label={`${qualityLabel} ${labels.cacheAmount}`}
-                unit={labels.amountUnit}
-                range={labels.amountRange}
-                min={0}
-                labels={labels}
-              />
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="mt-auto border-t border-border pt-4">
-        <ToolPresetButton
-          type="button"
-          variant="outline"
-          className="w-full"
-          onClick={reset}
-          icon={<RotateCcw aria-hidden="true" />}
-          label={labels.reset}
-        />
-      </div>
-    </div>
   );
 }
 
@@ -929,7 +762,7 @@ export function BlackMarketCalculator({
   locale: Locale;
   numberFormatter?: NumberFormatter;
 }) {
-  const { errors, inputs, result, fillFromShared } = useBlackMarketTool();
+  const { errors, inputs, result, fillPlayer, reset } = useBlackMarketTool();
   const hasErrors = Object.keys(errors).length > 0;
   const formatNumber = useMemo(
     () => numberFormatter ?? createNumberFormatter(locale),
@@ -944,12 +777,10 @@ export function BlackMarketCalculator({
             <div>
               <CardTitle className="site-tool-section-heading">{labels.primaryInputs}</CardTitle>
             </div>
-            <ToolPresetButton
-              type="button"
-              variant="outline"
-              onClick={fillFromShared}
-              icon={<Download aria-hidden="true" />}
-              label={labels.fillShared}
+            <ToolPrimaryActions
+              fillPlayer={{ label: labels.fillPlayer, onClick: fillPlayer }}
+              onReset={reset}
+              resetLabel={labels.reset}
             />
           </div>
         </CardHeader>
@@ -967,28 +798,13 @@ export function BlackMarketCalculator({
                 placeholder={labels.levelPlaceholder}
                 labels={labels}
               />
-              <BlackMarketPrimaryField
-                field="bargainPercent"
-                id="black-market-bargain-percent"
-                label={labels.bargainPercent}
-                unit={labels.percentUnit}
-                range={labels.bargainRange}
-                min={0}
-                max={40}
-                labels={labels}
-              />
+              <BlackMarketBargainField locale={locale} />
               <BlackMarketBuffField
                 id="black-market-btc-buff-percent"
                 label={labels.btcBuffPercent}
                 labels={labels}
               />
-              <BlackMarketRateField
-                field="btcPerAi"
-                id="black-market-btc-per-ai"
-                label={labels.btcPerAi}
-                unit={labels.btcPerAiUnit}
-                labels={labels}
-              />
+              <BlackMarketExchangeRateField locale={locale} />
             </div>
           </div>
 
@@ -996,17 +812,34 @@ export function BlackMarketCalculator({
             <h3 className="text-sm font-medium text-foreground">{labels.prices}</h3>
             <div className="mt-4 @container">
               <div className="grid gap-5 @min-[24rem]:grid-cols-2 @min-[64rem]:grid-cols-4">
+                {blackMarketQualityCatalog.map((quality) => (
+                  <BlackMarketCacheRateField
+                    key={quality.id}
+                    qualityId={quality.id}
+                    locale={locale}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-sm font-medium text-foreground">{labels.amounts}</h3>
+            <div className="mt-4 @container">
+              <div className="grid gap-5 @min-[24rem]:grid-cols-2 @min-[64rem]:grid-cols-4">
                 {blackMarketQualityCatalog.map((quality) => {
-                  const field = blackMarketQualityToPriceField[quality.id];
-                  const cacheLabel = getMarketCacheRateDefinition(quality.id).labels[locale];
+                  const field = blackMarketQualityToAmountField[quality.id];
+                  const qualityLabel = quality.labels[locale];
 
                   return (
-                    <BlackMarketRateField
+                    <BlackMarketPrimaryField
                       key={quality.id}
                       field={field}
-                      id={`black-market-${quality.id}-cache-rate`}
-                      label={`${cacheLabel} ${labels.cacheRate}`}
-                      unit={labels.cacheRateUnit}
+                      id={`black-market-${quality.id}-amount`}
+                      label={`${qualityLabel} ${labels.cacheAmount}`}
+                      unit={labels.amountUnit}
+                      range={labels.amountRange}
+                      min={0}
                       labels={labels}
                     />
                   );
@@ -1043,8 +876,6 @@ export function BlackMarketToolPage({
   contextLabel,
   contextPanelLabel,
   contextCloseLabel,
-  labels,
-  locale,
   header,
   headerActions,
   children,
@@ -1065,21 +896,6 @@ export function BlackMarketToolPage({
         contextCloseLabel={contextCloseLabel}
         header={header}
         headerActions={headerActions}
-        settings={{
-          id: 'settings',
-          label: labels.settingsTab,
-          title: labels.settingsTitle,
-          openLabel: labels.openSettings,
-          closeLabel: labels.closeSettings,
-          idPrefix: 'black-market-settings',
-          render: ({ idPrefix }) => (
-            <BlackMarketSettingsPanel
-              labels={labels}
-              locale={locale}
-              idPrefix={idPrefix}
-            />
-          ),
-        }}
       >
         {children}
       </ToolPage>

@@ -7,7 +7,6 @@ import {
   useMemo,
   type ReactNode,
 } from 'react';
-import { RotateCcw } from 'lucide-react';
 
 import type { ContextualDocsPageProps } from '@/components/context';
 import {
@@ -16,7 +15,7 @@ import {
   ToolField,
   ToolInputField,
   ToolPage,
-  ToolPresetButton,
+  ToolPrimaryActions,
   ToolState,
 } from '@/components/tools';
 import {
@@ -43,7 +42,6 @@ import {
 } from '@/lib/backpack-planner-state';
 import type { Locale } from '@/lib/i18n';
 import { createNumberFormatter, type NumberFormatter } from '@/lib/number-formatting';
-import { clearToolState } from '@/lib/storage';
 import { useToolStateStorage } from '@/lib/storage/use-tool-state';
 
 export interface BackpackPlannerToolLabels {
@@ -179,8 +177,10 @@ export function BackpackPlannerToolProvider({ children }: { children: ReactNode 
   }, [setValues]);
 
   const reset = useCallback(() => {
-    clearToolState('backpack-planner');
-    setValues(createDefaultBackpackPlannerToolState());
+    setValues((current) => ({
+      ...current,
+      targetTierId: defaultBackpackPlannerToolState.targetTierId,
+    }));
   }, [setValues]);
 
   const calculation = useMemo(() => calculateBackpackPlannerTool(values), [values]);
@@ -390,12 +390,9 @@ export function BackpackPlannerCalculator({
             <div>
               <CardTitle className="site-tool-section-heading">{labels.primaryInputs}</CardTitle>
             </div>
-            <ToolPresetButton
-              type="button"
-              variant="outline"
-              onClick={reset}
-              icon={<RotateCcw aria-hidden="true" />}
-              label={labels.reset}
+            <ToolPrimaryActions
+              onReset={reset}
+              resetLabel={labels.reset}
             />
           </div>
         </CardHeader>

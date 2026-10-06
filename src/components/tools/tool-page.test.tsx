@@ -74,7 +74,13 @@ describe('共用 Tool Page 模板', () => {
           closeLabel: '關閉工具設定',
           idPrefix: 'search-reward-settings',
           render: ({ surface, idPrefix }) => (
-            <p>{surface === 'desktop' ? `桌面設定 ${idPrefix}` : `行動設定 ${idPrefix}`}</p>
+            <div
+              data-settings-order="buff assumption mode"
+              data-settings-surface={surface}
+              data-settings-id-prefix={idPrefix}
+            >
+              {surface === 'desktop' ? `桌面設定 ${idPrefix}` : `行動設定 ${idPrefix}`}
+            </div>
           ),
         }}
         contextItems={[
@@ -103,6 +109,9 @@ describe('共用 Tool Page 模板', () => {
     expect(markup).toContain('data-context-id="tool-settings"');
     expect(markup).toContain('桌面設定 search-reward-settings-desktop');
     expect(markup).toContain('行動設定 search-reward-settings-mobile');
+    expect(markup.match(/data-settings-order="buff assumption mode"/g)).toHaveLength(2);
+    expect(markup).toContain('data-settings-surface="desktop"');
+    expect(markup).toContain('data-settings-surface="mobile"');
     expect(markup).toContain('data-context-mobile-id="info-summary"');
     expect(markup).toContain('摘要行動內容');
     expect(markup).toContain('主要輸入與結果');

@@ -8,15 +8,13 @@ import { getMessages } from '@/lib/translations';
 
 import {
   BlackMarketCalculator,
-  BlackMarketSettingsPanel,
   BlackMarketToolProvider,
-  applyBlackMarketSharedValues,
+  applyBlackMarketPlayerValues,
   calculateBlackMarketTool,
   createBlackMarketValues,
   normalizeBlackMarketToolState,
   parseBlackMarketValues,
   selectBlackMarketSharedValues,
-  updateBlackMarketSharedValue,
 } from './black-market-calculator';
 
 function renderBlackMarket(children: ReactNode) {
@@ -31,7 +29,7 @@ function renderBlackMarket(children: ReactNode) {
 }
 
 describe('Black market calculator presentation', () => {
-  it('主要輸入呈現等級、收益加成、快取與匯率，卡片結果拆解採雙欄橫向列式', () => {
+  it('依 HEAD 的分區結構呈現等級、共用換算、BUFF 與四種快取數量', () => {
     const labels = getMessages('zh-tw').tools.blackMarket;
     const markup = renderBlackMarket(
       <BlackMarketCalculator labels={labels} locale="zh-tw" />,
@@ -41,25 +39,24 @@ describe('Black market calculator presentation', () => {
     expect(markup).toContain('id="black-market-printing-level"');
     expect(markup).toContain('id="black-market-bargain-percent"');
     expect(markup).toContain('id="black-market-btc-buff-percent"');
-    expect(markup).toContain('aria-valuenow="100"');
+    expect(markup).toContain('id="black-market-btc-per-ai"');
     expect(markup).toContain('id="black-market-trash-cache-rate"');
     expect(markup).toContain('id="black-market-common-cache-rate"');
     expect(markup).toContain('id="black-market-high-quality-cache-rate"');
     expect(markup).toContain('id="black-market-rare-cache-rate"');
-    expect(markup).toContain('id="black-market-btc-per-ai"');
-    expect(markup.indexOf('id="black-market-btc-buff-percent"')).toBeLessThan(
-      markup.indexOf('id="black-market-btc-per-ai"'),
-    );
+    expect(markup).toContain('id="black-market-trash-amount"');
+    expect(markup).toContain('id="black-market-common-amount"');
+    expect(markup).toContain('id="black-market-high-quality-amount"');
+    expect(markup).toContain('id="black-market-rare-amount"');
+    expect(markup).toContain('data-tool-reset=""');
+    expect(markup).toContain('data-tool-fill-player=""');
     expect(markup).not.toContain('id="black-market-exp-buff-percent"');
-    expect(markup).not.toContain('id="black-market-trash-amount"');
-    expect(markup).not.toContain('id="black-market-common-amount"');
-    expect(markup).not.toContain('id="black-market-high-quality-amount"');
-    expect(markup).not.toContain('id="black-market-rare-amount"');
+    expect(markup.match(/>共用<\/span>/g)).toHaveLength(6);
     expect(markup).toContain('廢棄');
     expect(markup).toContain('普通');
     expect(markup).toContain('高級');
     expect(markup).toContain('稀有');
-    expect(markup).toContain('從共用設定填入');
+    expect(markup).toContain('帶入玩家等級');
     expect(markup).toContain('@min-[24rem]:grid-cols-2');
     expect(markup).toContain('估算淨收益');
     expect(markup).toContain('淨收益（AI）');
@@ -81,33 +78,52 @@ describe('Black market calculator presentation', () => {
     expect(markup).not.toContain('CCO Found');
   });
 
-  it('設定面板提供四種快取數量，不建立逐欄位覆寫切換', () => {
+  it('主要輸入沿用 HEAD 分區並保留快取數量順序，沒有額外設定面板欄位', () => {
     const labels = getMessages('zh-tw').tools.blackMarket;
     const markup = renderBlackMarket(
-      <BlackMarketSettingsPanel
-        labels={labels}
-        locale="zh-tw"
-        idPrefix="test-black-market-settings"
-      />,
+      <BlackMarketCalculator labels={labels} locale="zh-tw" />,
     );
 
-    expect(markup).toContain('id="test-black-market-settings-trash-amount"');
-    expect(markup).toContain('id="test-black-market-settings-common-amount"');
-    expect(markup).toContain('id="test-black-market-settings-high-quality-amount"');
-    expect(markup).toContain('id="test-black-market-settings-rare-amount"');
-    expect(markup).not.toContain('exp-buff-percent');
-    expect(markup).not.toContain('cache-rate');
-    expect(markup).not.toContain('btc-per-ai');
-    expect(markup).not.toContain('沿用共用值');
-    expect(markup).not.toContain('本工具覆寫');
+    const fields = [
+      'black-market-printing-level',
+      'black-market-bargain-percent',
+      'black-market-btc-buff-percent',
+      'black-market-btc-per-ai',
+      'black-market-trash-cache-rate',
+      'black-market-trash-amount',
+      'black-market-common-amount',
+      'black-market-high-quality-amount',
+      'black-market-rare-amount',
+    ].map((id) => markup.indexOf(`id="${id}"`));
+    expect(fields.every((position, index) =>
+      position >= 0 && (index === 0 || position > fields[index - 1]),
+    )).toBe(true);
+    expect(markup).toContain('@min-[64rem]:grid-cols-4');
+    expect(markup).not.toContain('data-context-id="settings"');
   });
 
-  it('將本工具狀態與價格草稿組合成計算輸入', () => {
+  it('render 的共用欄位沿用設定文案與經濟資料單位', () => {
+    const markup = renderBlackMarket(
+      <BlackMarketCalculator labels={getMessages('zh-tw').tools.blackMarket} locale="zh-tw" />,
+    );
+
+    expect(markup).toMatch(/for="black-market-bargain-percent">[\s\S]*?討價還價[\s\S]*?共用/);
+    expect(markup).toContain('id="black-market-bargain-percent-range"');
+    expect(markup).toContain('>0–40</span>');
+    expect(markup).toMatch(/id="black-market-bargain-percent-unit"[^>]*>%<\/span>/);
+    expect(markup).toMatch(/for="black-market-btc-per-ai">[\s\S]*?AI → BTC[\s\S]*?共用/);
+    expect(markup).toContain('id="black-market-btc-per-ai-range"');
+    expect(markup).toContain('>大於 0</span>');
+    expect(markup).toMatch(/id="black-market-btc-per-ai-unit"[^>]*>BTC\/AI<\/span>/);
+    expect(markup).toMatch(/for="black-market-trash-cache-rate">[\s\S]*?廢棄[\s\S]*?共用/);
+    expect(markup).toMatch(/id="black-market-trash-cache-rate-unit"[^>]*>cache\/AI<\/span>/);
+  });
+
+  it('將本地試算欄位與目前共享玩家／經濟值組合成計算輸入', () => {
     expect(
       createBlackMarketValues(
         {
           printingLevel: '500',
-          bargainPercent: '40',
           btcBuffPercent: '100',
           trashAmount: '1000',
           commonAmount: '900',
@@ -115,6 +131,8 @@ describe('Black market calculator presentation', () => {
           rareAmount: '700',
         },
         {
+          printingLevel: '500',
+          bargainPercent: '40',
           trashCachePerAi: '9',
           commonCachePerAi: '8',
           highQualityCachePerAi: '6',
@@ -176,10 +194,10 @@ describe('Black market calculator presentation', () => {
     });
   });
 
-  it('新狀態的 Buff 預設 100，既有值保留且填入共用設定不覆蓋 Buff', () => {
+  it('舊狀態的 bargainPercent 會遷移丟棄，並保留工具 BUFF 與試算數量', () => {
     const missingBuff = {
       printingLevel: '1',
-      bargainPercent: '0',
+      bargainPercent: '17',
       trashAmount: '1000',
       commonAmount: '1000',
       highQualityAmount: '1000',
@@ -190,38 +208,13 @@ describe('Black market calculator presentation', () => {
       .toBe('100');
 
     const shared = selectBlackMarketSharedValues(defaultSharedUserInputs);
-    const applied = applyBlackMarketSharedValues(
-      { ...missingBuff, btcBuffPercent: '40' },
+    const applied = applyBlackMarketPlayerValues(
+      { ...normalizeBlackMarketToolState(missingBuff)!, btcBuffPercent: '40' },
       shared,
     );
     expect(applied.btcBuffPercent).toBe('40');
-  });
-
-  it('將有效快取換算與匯率修改回寫共用庫，回到預設值時移除覆寫', () => {
-    const withCacheOverride = updateBlackMarketSharedValue(
-      defaultSharedUserInputs,
-      'commonCachePerAi',
-      10,
-    );
-    expect(withCacheOverride.economy.cacheRates).toEqual([
-      { id: 'common', value: 10 },
-    ]);
-
-    const restoredCache = updateBlackMarketSharedValue(
-      withCacheOverride,
-      'commonCachePerAi',
-      8,
-    );
-    expect(restoredCache.economy.cacheRates).toEqual([]);
-
-    const withRateOverride = updateBlackMarketSharedValue(
-      defaultSharedUserInputs,
-      'btcPerAi',
-      9000,
-    );
-    expect(withRateOverride.economy.exchangeRates).toEqual([
-      { id: 'btc-per-ai', value: 9000 },
-    ]);
+    expect(applied.trashAmount).toBe('1000');
+    expect(applied).not.toHaveProperty('bargainPercent');
   });
 
   it('拒絕小數、負值與超出共用限制，合法輸入才產生結果', () => {

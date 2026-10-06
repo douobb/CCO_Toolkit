@@ -219,7 +219,6 @@ const toolRenderers: Readonly<Record<string, ToolRenderer>> = {
         contextLabel={messages.context.onThisPage}
         contextPanelLabel={messages.context.panelLabel}
         contextCloseLabel={messages.context.closePanel}
-        labels={labels}
         header={<ToolHeader page={page} locale={locale} labels={messages.articleMetadata} />}
         headerActions={<MarkdownCopyButton markdownUrl={markdownUrl} />}
       >

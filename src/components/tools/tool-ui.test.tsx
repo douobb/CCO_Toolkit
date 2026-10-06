@@ -5,6 +5,7 @@ import {
   ToolBreakdown,
   ToolBuffSliderField,
   ToolInputField,
+  ToolPrimaryActions,
   ToolPresetButton,
   ToolResultCard,
   ToolState,
@@ -132,5 +133,20 @@ describe('共用 Tool UI', () => {
     expect(markup).toContain('type="button"');
     expect(markup).toContain('恢復預設');
     expect(markup).toContain('aria-hidden="true"');
+  });
+
+  it('提供固定順序的帶入玩家與本工具重設操作', () => {
+    const markup = renderToStaticMarkup(
+      <ToolPrimaryActions
+        fillPlayer={{ label: '帶入玩家等級', onClick: () => undefined }}
+        onReset={() => undefined}
+        resetLabel="重設本工具"
+      />,
+    );
+
+    expect(markup).toContain('data-tool-primary-actions=""');
+    expect(markup).toContain('data-tool-fill-player=""');
+    expect(markup).toContain('data-tool-reset=""');
+    expect(markup.indexOf('帶入玩家等級')).toBeLessThan(markup.indexOf('重設本工具'));
   });
 });

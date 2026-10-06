@@ -1,4 +1,5 @@
-import type { ComponentPropsWithoutRef, ReactNode } from 'react';
+import { useState, type ComponentPropsWithoutRef, type ReactNode } from 'react';
+import { Download, RotateCcw } from 'lucide-react';
 
 import { Button, type ButtonProps } from '@/components/ui/button';
 import {
@@ -157,6 +158,78 @@ export function ToolInputField({
         ) : null}
       </div>
     </ToolField>
+  );
+}
+
+export type ToolSharedNumberFieldProps = Omit<
+  ToolInputFieldProps,
+  'type' | 'value' | 'onChange' | 'min' | 'max' | 'step' | 'error' | 'label'
+> & {
+  label: ReactNode;
+  sharedLabel: string;
+  value: string;
+  min: number;
+  max?: number;
+  integer?: boolean;
+  invalidValueMessage: string;
+  onValueChange: (value: number) => boolean;
+};
+
+/** 共用數值欄位保留無效草稿；只有合法值會寫入 sharedStore。 */
+export function ToolSharedNumberField({
+  id,
+  label,
+  sharedLabel,
+  value,
+  min,
+  max = Number.MAX_SAFE_INTEGER,
+  integer = true,
+  invalidValueMessage,
+  onValueChange,
+  inputMode,
+  ...props
+}: ToolSharedNumberFieldProps) {
+  const [invalidDraft, setInvalidDraft] = useState<string | null>(null);
+  const draft = invalidDraft ?? value;
+
+  const handleChange = (rawValue: string) => {
+    const normalized = rawValue.trim();
+    const parsed = normalized === '' ? Number.NaN : Number(normalized);
+    const valid = Number.isFinite(parsed)
+      && parsed >= min
+      && parsed <= max
+      && (!integer || Number.isSafeInteger(parsed));
+
+    if (!valid || !onValueChange(parsed)) {
+      setInvalidDraft(rawValue);
+      return;
+    }
+
+    setInvalidDraft(null);
+  };
+
+  return (
+    <ToolInputField
+      {...props}
+      id={id}
+      label={(
+        <span className="inline-flex min-w-0 flex-wrap items-center gap-2">
+          <span>{label}</span>
+          <span className="rounded-sm bg-muted px-1.5 py-0.5 text-[0.6875rem] font-normal leading-4 text-muted-foreground">
+            {sharedLabel}
+          </span>
+        </span>
+      )}
+      type="text"
+      inputMode={inputMode ?? (integer ? 'numeric' : 'decimal')}
+      min={min}
+      max={max}
+      step={integer ? '1' : 'any'}
+      value={draft}
+      onChange={(event) => handleChange(event.currentTarget.value)}
+      error={invalidDraft !== null ? invalidValueMessage : undefined}
+      aria-invalid={invalidDraft !== null || undefined}
+    />
   );
 }
 
@@ -426,5 +499,47 @@ export function ToolPresetButton({ label, icon, ...props }: ToolPresetButtonProp
       {icon}
       {label}
     </Button>
+  );
+}
+
+export type ToolPrimaryActionsProps = {
+  readonly onReset: () => void;
+  readonly resetLabel: ReactNode;
+  readonly fillPlayer?: {
+    readonly label: ReactNode;
+    readonly onClick: () => void;
+  };
+};
+
+/** 所有工具在主要輸入標題列共用的玩家帶入與本工具重設操作。 */
+export function ToolPrimaryActions({
+  onReset,
+  resetLabel,
+  fillPlayer,
+}: ToolPrimaryActionsProps) {
+  return (
+    <div
+      data-tool-primary-actions=""
+      className="flex flex-wrap items-center justify-end gap-2"
+    >
+      {fillPlayer ? (
+        <ToolPresetButton
+          type="button"
+          variant="outline"
+          data-tool-fill-player=""
+          onClick={fillPlayer.onClick}
+          icon={<Download aria-hidden="true" />}
+          label={fillPlayer.label}
+        />
+      ) : null}
+      <ToolPresetButton
+        type="button"
+        variant="outline"
+        data-tool-reset=""
+        onClick={onReset}
+        icon={<RotateCcw aria-hidden="true" />}
+        label={resetLabel}
+      />
+    </div>
   );
 }

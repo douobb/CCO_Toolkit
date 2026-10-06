@@ -23,13 +23,13 @@ import { createSharedUserInputsStore } from '@/lib/storage';
 import { toolRegistry } from '@/lib/tools';
 import { getMessages } from '@/lib/translations';
 
-function renderEarningsOverview(metadata: {
+function renderTool(rendererKey: string, metadata: {
   author?: string;
   date?: string;
   updated?: string;
 }) {
-  const renderer = getToolRenderer('earnings-overview');
-  if (!renderer) throw new Error('缺少 earnings-overview renderer');
+  const renderer = getToolRenderer(rendererKey);
+  if (!renderer) throw new Error(`缺少 ${rendererKey} renderer`);
 
   const store = createSharedUserInputsStore({ storage: null });
   const markup = renderToStaticMarkup(
@@ -53,6 +53,14 @@ function renderEarningsOverview(metadata: {
   return markup;
 }
 
+function renderEarningsOverview(metadata: {
+  author?: string;
+  date?: string;
+  updated?: string;
+}) {
+  return renderTool('earnings-overview', metadata);
+}
+
 describe('Tool renderer registry', () => {
   it('以 renderer key 對應可執行工具 renderer', () => {
     expect(toolRendererKeys).toContain('search-reward');
@@ -73,6 +81,15 @@ describe('Tool renderer registry', () => {
     expect(getToolRenderer('loot-box-analysis')).toBeTypeOf('function');
     expect(getToolRenderer('unknown-renderer')).toBeUndefined();
     expect(toolRegistry.every((tool) => getToolRenderer(tool.renderer))).toBe(true);
+  });
+
+  it('八個工具 renderer 都可在伺服器端輸出主要輸入與統一重設', () => {
+    for (const rendererKey of toolRendererKeys) {
+      const markup = renderTool(rendererKey, {});
+
+      expect(markup, rendererKey).toContain('data-tool=');
+      expect(markup, rendererKey).toContain('data-tool-reset=""');
+    }
   });
 
   it('將 frontmatter metadata 放在工具標題區，缺省時不產生 metadata markup', () => {

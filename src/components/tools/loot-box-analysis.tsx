@@ -15,13 +15,13 @@ import { Pencil, Play, Trash2, X } from 'lucide-react';
 import type { ContextualDocsPageProps } from '@/components/context';
 import {
   useSharedUserInputs,
-  useSharedUserInputsStore,
 } from '@/components/shared-user-inputs';
 import {
   ToolBreakdown,
   ToolField,
   ToolInputField,
   ToolPage,
+  ToolPrimaryActions,
   ToolState,
   ToolValidationSummary,
 } from '@/components/tools';
@@ -32,10 +32,6 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import {
-  getMarketPriceDefinition,
-  type MarketPriceItemId,
-} from '@/data/game/economy';
 import {
   getLootBoxDropDefinition,
   getLootBoxDropIdsForBox,
@@ -53,7 +49,6 @@ import {
   lootBoxCostAi,
 } from '@/lib/loot-box-calculator';
 import {
-  getDualPrice,
   resolveMarketPrices,
   type ResolvedMarketPrices,
 } from '@/lib/market-prices';
@@ -75,28 +70,11 @@ import {
   type LootBoxSimulationSummary,
   type LootBoxTypeAnalysis,
 } from '@/lib/loot-box-analysis';
-import {
-  defaultSharedUserInputs,
-  type SharedUserInputs,
-} from '@/lib/storage';
 import { useToolStateStorage } from '@/lib/storage/use-tool-state';
 
 export interface LootBoxAnalysisToolLabels {
-  readonly settingsTab: string;
-  readonly settingsTitle: string;
-  readonly openSettings: string;
-  readonly closeSettings: string;
-  readonly prices: string;
-  readonly priceRange: string;
-  readonly hashPrice: string;
-  readonly techScrapPrice: string;
-  readonly gangSupplyCratePrice: string;
-  readonly oldPouchPrice: string;
-  readonly whiteBoxPrice: string;
-  readonly yellowBoxPrice: string;
-  readonly purpleBoxPrice: string;
-  readonly validationPrice: string;
   readonly primaryInputs: string;
+  readonly reset: string;
   readonly boxType: string;
   readonly boxPlaceholder: string;
   readonly openings: string;
@@ -158,93 +136,7 @@ export interface LootBoxAnalysisDraftErrors {
   drops?: 'drops';
 }
 
-type LootBoxPriceItemId = Extract<
-  MarketPriceItemId,
-  | 'hash'
-  | 'tech-scrap'
-  | 'supply-crate-gang'
-  | 'old-pouch'
-  | 'locked-container'
-  | 'locked-rare-container'
-  | 'locked-legendary-container'
->;
-
-type LootBoxPriceLabelKey =
-  | 'hashPrice'
-  | 'techScrapPrice'
-  | 'gangSupplyCratePrice'
-  | 'oldPouchPrice'
-  | 'whiteBoxPrice'
-  | 'yellowBoxPrice'
-  | 'purpleBoxPrice';
-
-type LootBoxPriceDrafts = Readonly<Record<LootBoxPriceItemId, string>>;
-
-const lootBoxPriceFields = [
-  { itemId: 'hash', labelKey: 'hashPrice' },
-  { itemId: 'tech-scrap', labelKey: 'techScrapPrice' },
-  { itemId: 'supply-crate-gang', labelKey: 'gangSupplyCratePrice' },
-  { itemId: 'old-pouch', labelKey: 'oldPouchPrice' },
-  { itemId: 'locked-container', labelKey: 'whiteBoxPrice' },
-  { itemId: 'locked-rare-container', labelKey: 'yellowBoxPrice' },
-  { itemId: 'locked-legendary-container', labelKey: 'purpleBoxPrice' },
-] as const satisfies readonly {
-  readonly itemId: LootBoxPriceItemId;
-  readonly labelKey: LootBoxPriceLabelKey;
-}[];
-
 const lootBoxRecordsPageSize = 20;
-
-function selectLootBoxPriceDrafts(snapshot: SharedUserInputs): LootBoxPriceDrafts {
-  const prices = resolveMarketPrices(snapshot);
-
-  return Object.fromEntries(
-    lootBoxPriceFields.map(({ itemId }) => {
-      const definition = getMarketPriceDefinition(itemId);
-      return [itemId, String(getDualPrice(prices, itemId, definition.defaultBasisCurrencyId))];
-    }),
-  ) as LootBoxPriceDrafts;
-}
-
-function updateLootBoxSharedPrice(
-  snapshot: SharedUserInputs,
-  itemId: LootBoxPriceItemId,
-  amount: number,
-): SharedUserInputs {
-  if (!Number.isFinite(amount) || amount < 0 || amount > Number.MAX_SAFE_INTEGER) {
-    return snapshot;
-  }
-
-  const definition = getMarketPriceDefinition(itemId);
-  const pricesWithoutCurrent = snapshot.economy.prices.filter((price) => price.itemId !== itemId);
-
-  return {
-    ...snapshot,
-    economy: {
-      ...snapshot.economy,
-      prices: amount === definition.defaultBasisValue
-        ? pricesWithoutCurrent
-        : [
-            ...pricesWithoutCurrent,
-            {
-              itemId,
-              currencyId: definition.defaultBasisCurrencyId,
-              amount,
-            },
-          ],
-    },
-  };
-}
-
-function parsePrice(value: string): number | null {
-  const normalized = value.trim();
-  if (!normalized) return null;
-
-  const parsed = Number(normalized);
-  return Number.isFinite(parsed) && parsed >= 0 && parsed <= Number.MAX_SAFE_INTEGER
-    ? parsed
-    : null;
-}
 
 function formatTemplate(
   template: string,
@@ -392,12 +284,12 @@ interface LootBoxAnalysisContextValue {
   readonly state: LootBoxAnalysisState;
   readonly analyses: readonly LootBoxTypeAnalysis[];
   readonly prices: ResolvedMarketPrices;
-  readonly priceDrafts: LootBoxPriceDrafts;
   readonly simulations: SimulationStates;
+  readonly resetVersion: number;
   readonly setBoxType: (value: string) => void;
   readonly setOpenings: (value: string) => void;
   readonly setDropQuantity: (dropId: LootBoxDropId, value: string) => void;
-  readonly setPrice: (itemId: LootBoxPriceItemId, value: string) => void;
+  readonly reset: () => void;
   readonly save: () => boolean;
   readonly startEdit: (record: LootBoxAnalysisRecord) => void;
   readonly cancelEdit: () => void;
@@ -424,6 +316,7 @@ export function LootBoxAnalysisToolProvider({
 }) {
   const [draft, setDraft] = useState<LootBoxAnalysisDraft>(createDefaultLootBoxAnalysisDraft());
   const [validationAttempted, setValidationAttempted] = useState(false);
+  const [resetVersion, setResetVersion] = useState(0);
   const [state, setState] = useToolStateStorage<LootBoxAnalysisState>(
     'loot-box-analysis',
     createDefaultLootBoxAnalysisState,
@@ -433,45 +326,11 @@ export function LootBoxAnalysisToolProvider({
   const [simulations, setSimulations] = useState<SimulationStates>(createSimulationStates);
   const simulationRequests = useRef<Record<LootBoxId, number>>(createSimulationRequests());
   const sharedSnapshot = useSharedUserInputs();
-  const sharedStore = useSharedUserInputsStore();
   const prices = useMemo(() => resolveMarketPrices(sharedSnapshot), [sharedSnapshot]);
-  const sharedPriceValues = useMemo(
-    () => selectLootBoxPriceDrafts(sharedSnapshot),
-    [sharedSnapshot],
-  );
-  const [priceDrafts, setPriceDrafts] = useState<LootBoxPriceDrafts>(() =>
-    selectLootBoxPriceDrafts(defaultSharedUserInputs),
-  );
-  const [dirtyPriceFields, setDirtyPriceFields] = useState<ReadonlySet<LootBoxPriceItemId>>(
-    () => new Set(),
-  );
   const analyses = useMemo(
     () => calculateLootBoxAnalysis(state.records, prices, state.rollups),
     [prices, state.records, state.rollups],
   );
-
-  useEffect(() => {
-    let cancelled = false;
-    queueMicrotask(() => {
-      if (cancelled) return;
-
-      setPriceDrafts((current) => {
-        let next: LootBoxPriceDrafts | null = null;
-
-        for (const { itemId } of lootBoxPriceFields) {
-          if (!dirtyPriceFields.has(itemId) && current[itemId] !== sharedPriceValues[itemId]) {
-            next = { ...(next ?? current), [itemId]: sharedPriceValues[itemId] };
-          }
-        }
-
-        return next ?? current;
-      });
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [dirtyPriceFields, sharedPriceValues]);
 
   const setBoxType = useCallback((value: string) => {
     if (!isLootBoxId(value)) {
@@ -499,33 +358,6 @@ export function LootBoxAnalysisToolProvider({
       quantities: { ...current.quantities, [dropId]: value },
     }));
   }, []);
-
-  const setPrice = useCallback(
-    (itemId: LootBoxPriceItemId, value: string) => {
-      setPriceDrafts((current) => ({ ...current, [itemId]: value }));
-      setDirtyPriceFields((current) => {
-        const next = new Set(current);
-        next.add(itemId);
-        return next;
-      });
-
-      const parsed = parsePrice(value);
-      if (parsed === null) return;
-
-      const accepted = sharedStore.update((current) =>
-        updateLootBoxSharedPrice(current, itemId, parsed),
-      );
-      if (!accepted) return;
-
-      setDirtyPriceFields((current) => {
-        if (!current.has(itemId)) return current;
-        const next = new Set(current);
-        next.delete(itemId);
-        return next;
-      });
-    },
-    [sharedStore],
-  );
 
   const startSimulation = useCallback(async (
     boxType: LootBoxId,
@@ -646,6 +478,13 @@ export function LootBoxAnalysisToolProvider({
     setValidationAttempted(false);
   }, []);
 
+  const reset = useCallback(() => {
+    setDraft(createDefaultLootBoxAnalysisDraft());
+    setEditingRecordId(null);
+    setValidationAttempted(false);
+    setResetVersion((current) => current + 1);
+  }, []);
+
   const clearSimulation = useCallback((boxType: LootBoxId) => {
     const current = simulations[boxType];
     if (current.status === 'idle' && current.signature === null && current.result === null) return;
@@ -700,12 +539,12 @@ export function LootBoxAnalysisToolProvider({
       state,
       analyses,
       prices,
-      priceDrafts,
       simulations,
+      resetVersion,
       setBoxType,
       setOpenings,
       setDropQuantity,
-      setPrice,
+      reset,
       save,
       startEdit,
       cancelEdit,
@@ -719,14 +558,14 @@ export function LootBoxAnalysisToolProvider({
     draft,
     editingRecordId,
     parsed.errors,
-    priceDrafts,
     prices,
     runSimulation,
     save,
     setBoxType,
     setDropQuantity,
     setOpenings,
-    setPrice,
+    reset,
+    resetVersion,
     simulations,
     startEdit,
     state,
@@ -833,6 +672,7 @@ function LootBoxRecordForm({
     setDropQuantity,
     save,
     cancelEdit,
+    reset,
   } = useLootBoxAnalysisTool();
   const boxType = isLootBoxId(draft.boxType) ? draft.boxType : null;
   const dropIds = boxType ? getLootBoxDropIdsForBox(boxType) : [];
@@ -841,8 +681,9 @@ function LootBoxRecordForm({
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="flex-row flex-wrap items-start justify-between gap-4">
         <CardTitle className="site-tool-section-heading">{labels.primaryInputs}</CardTitle>
+        <ToolPrimaryActions onReset={reset} resetLabel={labels.reset} />
       </CardHeader>
       <CardContent className="space-y-7">
         {validation ? <ToolValidationSummary>{labels.validationSummary}</ToolValidationSummary> : null}
@@ -1259,51 +1100,6 @@ function LootBoxRecordsTable({
   );
 }
 
-function LootBoxAnalysisSettingsPanel({
-  labels,
-  idPrefix,
-}: {
-  readonly labels: LootBoxAnalysisToolLabels;
-  readonly idPrefix: string;
-}) {
-  const { priceDrafts, setPrice } = useLootBoxAnalysisTool();
-
-  return (
-    <div className="flex h-full flex-col gap-6 p-4">
-      <div>
-        <h2 className="font-semibold text-foreground">{labels.settingsTitle}</h2>
-      </div>
-
-      <div className="space-y-4">
-        <h3 className="text-sm font-medium text-foreground">{labels.prices}</h3>
-        <div className="space-y-5">
-          {lootBoxPriceFields.map(({ itemId, labelKey }) => {
-            const definition = getMarketPriceDefinition(itemId);
-            const value = priceDrafts[itemId];
-
-            return (
-              <ToolInputField
-                key={itemId}
-                id={`${idPrefix}-${itemId}`}
-                label={labels[labelKey]}
-                type="number"
-                inputMode="decimal"
-                min={0}
-                step="any"
-                value={value}
-                onChange={(event) => setPrice(itemId, event.target.value)}
-                range={labels.priceRange}
-                unit={definition.unit}
-                error={parsePrice(value) === null ? labels.validationPrice : undefined}
-              />
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export function LootBoxAnalysisCalculator({
   labels,
   locale,
@@ -1313,6 +1109,7 @@ export function LootBoxAnalysisCalculator({
   readonly locale: Locale;
   readonly numberFormatter?: NumberFormatter;
 }) {
+  const { resetVersion } = useLootBoxAnalysisTool();
   const formatNumber = useMemo(
     () => numberFormatter ?? createNumberFormatter(locale),
     [locale, numberFormatter],
@@ -1322,7 +1119,12 @@ export function LootBoxAnalysisCalculator({
     <div className="not-prose my-8 space-y-8" data-tool="loot-box-analysis">
       <LootBoxRecordForm labels={labels} locale={locale} />
       <LootBoxAnalysisResults labels={labels} locale={locale} formatNumber={formatNumber} />
-      <LootBoxRecordsTable labels={labels} locale={locale} formatNumber={formatNumber} />
+      <LootBoxRecordsTable
+        key={resetVersion}
+        labels={labels}
+        locale={locale}
+        formatNumber={formatNumber}
+      />
     </div>
   );
 }
@@ -1353,20 +1155,6 @@ export function LootBoxAnalysisToolPage({
         contextCloseLabel={contextCloseLabel}
         header={header}
         headerActions={headerActions}
-        settings={{
-          id: 'settings',
-          label: labels.settingsTab,
-          title: labels.settingsTitle,
-          openLabel: labels.openSettings,
-          closeLabel: labels.closeSettings,
-          idPrefix: 'loot-box-analysis-settings',
-          render: ({ idPrefix }) => (
-            <LootBoxAnalysisSettingsPanel
-              labels={labels}
-              idPrefix={idPrefix}
-            />
-          ),
-        }}
       >
         {children}
       </ToolPage>

@@ -14,13 +14,11 @@ import {
   ToolPlayerSettingsHeaderLink,
   ToolPlayerSettingsLanguageSelect,
 } from './tool-player-settings-link';
-import {
-  MiningCalculator,
-  MiningToolProvider,
-} from './tools/mining-calculator';
+
+const pathnameState = vi.hoisted(() => ({ pathname: '/CCO_Toolkit/en/tools/mining/' }));
 
 vi.mock('fumadocs-core/framework', () => ({
-  usePathname: () => '/CCO_Toolkit/en/tools/mining/',
+  usePathname: () => pathnameState.pathname,
 }));
 vi.mock('fumadocs-ui/contexts/i18n', () => ({
   useI18n: () => ({ locale: 'en' }),
@@ -55,6 +53,7 @@ afterEach(async () => {
   }
   document.body.innerHTML = '';
   window.history.replaceState(null, '', '/');
+  pathnameState.pathname = '/CCO_Toolkit/en/tools/mining/';
   vi.restoreAllMocks();
 });
 
@@ -70,12 +69,14 @@ async function mountMiningTool() {
       SharedUserInputsProviderForTest,
       { store },
       createElement(
-        MiningToolProvider,
+        Fragment,
         null,
-        createElement(MiningCalculator, {
-          labels: getMessages('en').tools.mining,
-          locale: 'en',
-        }),
+        createElement(
+          'div',
+          { 'data-tool': 'mining' },
+          createElement('input', { id: 'mining-hash-price', defaultValue: '123' }),
+          createElement('input', { id: 'mining-level', defaultValue: '1' }),
+        ),
         createElement(ToolPlayerSettingsHeaderLink),
       ),
     ));
@@ -127,6 +128,14 @@ function getQuickInput(id: string): HTMLInputElement {
   return input;
 }
 
+function getSettingsViewButton(view: 'related' | 'all'): HTMLButtonElement {
+  const button = document.body.querySelector<HTMLButtonElement>(
+    `[data-testid="tool-settings-view-${view}"]`,
+  );
+  if (!button) throw new Error(`settings view button is missing: ${view}`);
+  return button;
+}
+
 describe('工具頁玩家設定快速入口', () => {
   it('辨識工具總覽與已註冊的工具頁路徑', () => {
     expect(isToolPagePath('/zh-tw/tools')).toBe(true);
@@ -165,7 +174,7 @@ describe('工具頁玩家設定快速入口', () => {
     expect(markup).toContain('Language options');
   });
 
-  it('開啟與關閉不導覽、不卸載工具，並自動儲存有效共用值', async () => {
+  it('預設顯示本工具欄位，可切換全部設定並編輯 cacheRates 而不丟失篩選外資料', async () => {
     window.history.replaceState(null, '', '/CCO_Toolkit/en/tools/mining/?view=compact#results');
     const { container, store } = await mountMiningTool();
     const tool = container.querySelector('[data-tool="mining"]');
@@ -186,12 +195,29 @@ describe('工具頁玩家設定快速入口', () => {
     expect(`${window.location.pathname}${window.location.search}${window.location.hash}`).toBe(originalUrl);
     expect(getDialog().querySelector('[data-testid="shared-user-inputs-manager"][data-mode="quick"]'))
       .not.toBeNull();
+    expect(getDialog().textContent).toContain(getMessages('en').settingsPage.title);
+    expect(getSettingsViewButton('related').getAttribute('aria-pressed')).toBe('true');
+    expect(getSettingsViewButton('all').getAttribute('aria-pressed')).toBe('false');
     expect(getQuickInput('shared-level-level')).not.toBeNull();
-    expect(getQuickInput('shared-equipment-armor')).not.toBeNull();
+    expect(getQuickInput('shared-level-mining-skill')).not.toBeNull();
     expect(getQuickInput('shared-price-hash')).not.toBeNull();
+    expect(getQuickInput('shared-price-tech-scrap')).not.toBeNull();
     expect(getQuickInput('shared-exchange-btc-per-ai')).not.toBeNull();
     expect(document.body.querySelector('#tool-settings-mobile-shared-cache-trash')).toBeNull();
+    expect(document.body.querySelector('#tool-settings-mobile-shared-equipment-armor')).toBeNull();
     expect(getDialog().textContent).not.toContain(getMessages('en').settingsPage.resetTitle);
+
+    await click(getSettingsViewButton('all'));
+    expect(getSettingsViewButton('related').getAttribute('aria-pressed')).toBe('false');
+    expect(getSettingsViewButton('all').getAttribute('aria-pressed')).toBe('true');
+    expect(getQuickInput('shared-equipment-armor')).not.toBeNull();
+    const cacheRate = getQuickInput('shared-cache-trash');
+    await updateInput(cacheRate, '11');
+    expect(store.getSnapshot().economy.cacheRates).toEqual([{ id: 'trash', value: 11 }]);
+
+    await click(getSettingsViewButton('related'));
+    expect(document.body.querySelector('#tool-settings-mobile-shared-cache-trash')).toBeNull();
+    expect(store.getSnapshot().economy.cacheRates).toEqual([{ id: 'trash', value: 11 }]);
 
     const levelInput = getQuickInput('shared-level-level');
     await updateInput(levelInput, '120');
@@ -209,7 +235,7 @@ describe('工具頁玩家設定快速入口', () => {
     expect(container.querySelector('[data-tool="mining"]')).toBe(tool);
 
     const closeButton = getDialog().querySelector<HTMLButtonElement>(
-      '[aria-label="Close quick settings"]',
+      '[aria-label="Close shared settings"]',
     );
     if (!closeButton) throw new Error('quick settings close button is missing');
     await click(closeButton);
@@ -284,7 +310,7 @@ describe('工具頁玩家設定快速入口', () => {
     expect(store.getSnapshot()).toBe(latestSnapshot);
 
     const closeButton = getDialog().querySelector<HTMLButtonElement>(
-      '[aria-label="Close quick settings"]',
+      '[aria-label="Close shared settings"]',
     );
     if (!closeButton) throw new Error('quick settings close button is missing');
     await click(closeButton);
@@ -317,5 +343,22 @@ describe('工具頁玩家設定快速入口', () => {
     await click(trigger);
     expect(getQuickInput('shared-exchange-btc-per-ai').value).toBe('777');
     expect(getDialog().querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it('工具總覽預設全部設定，related 空範圍提供說明與全部設定入口', async () => {
+    pathnameState.pathname = '/en/tools/';
+    const { container } = await mountMiningTool();
+    const trigger = getMobileTrigger(container);
+    await click(trigger);
+
+    expect(getSettingsViewButton('all').getAttribute('aria-pressed')).toBe('true');
+    expect(getQuickInput('shared-cache-trash')).not.toBeNull();
+
+    await click(getSettingsViewButton('related'));
+    expect(getSettingsViewButton('related').getAttribute('aria-pressed')).toBe('true');
+    expect(getDialog().querySelector('[role="status"]')?.textContent)
+      .toContain('This tool has no shared settings');
+    expect(document.body.querySelector('#tool-settings-mobile-shared-cache-trash')).toBeNull();
+    expect(getSettingsViewButton('all').textContent).toContain('All settings');
   });
 });

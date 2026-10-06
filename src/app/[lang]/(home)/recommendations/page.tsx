@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Image from 'next/image';
 import { notFound } from 'next/navigation';
 import { DocsBody } from 'fumadocs-ui/layouts/docs/page';
 import { createRelativeLink } from 'fumadocs-ui/mdx';
@@ -17,6 +18,8 @@ import {
 import { getMessages } from '@/lib/translations';
 import { getPageImageUrl, source } from '@/lib/source';
 import { withBasePath } from '@/lib/site-paths';
+
+import styles from '../page-hero.module.css';
 
 type RecommendationsRouteParams = { lang: string };
 
@@ -73,12 +76,37 @@ export default async function RecommendationsPage({
 
   return (
     <div className="flex flex-1 flex-col">
-      <div className="mx-auto w-full max-w-5xl flex-1 px-6 py-12 sm:px-10 sm:py-16">
-        <header className="max-w-3xl">
-          <p className="mb-3 text-sm font-medium text-fd-muted-foreground">{messages.eyebrow}</p>
-          <SitePageTitle className="text-4xl font-bold tracking-tight sm:text-5xl">{page.data.title}</SitePageTitle>
-          <p className="mt-5 text-lg text-fd-muted-foreground">{page.data.description}</p>
-        </header>
+      <header className={`${styles.hero} dark`}>
+        <div className={styles.artwork} aria-hidden="true">
+          <div className="mx-auto h-full w-full max-w-5xl px-6 sm:px-10">
+            <div className={styles.artworkFrame}>
+              <Image
+                src={withBasePath('/images/brand/ciallo-banner.webp')}
+                alt=""
+                fill
+                sizes="(min-width: 976px) 896px, (min-width: 640px) calc(100vw - 80px), calc(100vw - 48px)"
+                className={styles.heroImage}
+                style={{ objectPosition: '75% 44%' }}
+              />
+              <div className={styles.heroShade} />
+            </div>
+          </div>
+        </div>
+        <div
+          className={`${styles.heroContent} mx-auto w-full max-w-5xl px-6 pt-12 pb-10 sm:px-10 sm:pt-16`}
+        >
+          <div className="max-w-3xl">
+            <p className="mb-3 text-sm font-medium text-fd-muted-foreground">{messages.eyebrow}</p>
+            <SitePageTitle className="text-4xl font-bold tracking-tight sm:text-5xl">
+              {page.data.title}
+            </SitePageTitle>
+            <p className="mt-5 text-lg text-fd-muted-foreground">
+              {page.data.description}
+            </p>
+          </div>
+        </div>
+      </header>
+      <div className="mx-auto w-full max-w-5xl flex-1 px-6 pb-12 sm:px-10 sm:pb-16">
         <article className="mt-10 max-w-5xl border-t pt-8">
           <DocsBody>
             <MDX

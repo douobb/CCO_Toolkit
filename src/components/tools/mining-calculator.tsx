@@ -4,11 +4,10 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useState,
 } from 'react';
-import { ArrowLeftRight, Download, RotateCcw } from 'lucide-react';
+import { ArrowLeftRight } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import type { ContextualDocsPageProps } from '@/components/context';
@@ -21,8 +20,9 @@ import {
   ToolBuffSliderField,
   ToolInputField,
   ToolPage,
-  ToolPresetButton,
+  ToolPrimaryActions,
   ToolResultCard,
+  ToolSharedNumberField,
   ToolState,
   ToolValidationSummary,
 } from '@/components/tools';
@@ -33,7 +33,6 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { economyDataSet, getMarketPriceDefinition, type MarketPriceItemId } from '@/data/game/economy';
 import { getProgressionLevelDefinition, getProgressionMethods } from '@/data/game/progression';
 import {
   calculateMining,
@@ -55,41 +54,29 @@ import type { Locale } from '@/lib/i18n';
 import { cn } from '@/lib/cn';
 import {
   clearToolState,
-  defaultSharedUserInputs,
   type SharedUserInputs,
 } from '@/lib/storage';
 import { useToolStateStorage } from '@/lib/storage/use-tool-state';
+import { updateSharedExchangeRate, updateSharedMarketPrice } from './shared-input-updates';
+import { getSharedFieldPresentation } from './shared-field-presentation';
 
 export interface MiningToolLabels {
-  readonly settingsTab: string;
-  readonly settingsTitle: string;
-  readonly openSettings: string;
-  readonly closeSettings: string;
   readonly primaryInputs: string;
   readonly miningLevel: string;
   readonly miningLevelPlaceholder: string;
+  readonly hashPrice: string;
+  readonly hashPriceUnit: string;
   readonly levelRange: string;
   readonly levelUnit: string;
-  readonly prices: string;
-  readonly hashPrice: string;
-  readonly techScrapPrice: string;
-  readonly btcPerAi: string;
-  readonly hashPriceUnit: string;
-  readonly techScrapPriceUnit: string;
-  readonly btcPerAiUnit: string;
   readonly buffs: string;
   readonly cortexBonus: string;
   readonly tradeExploit: string;
   readonly percentUnit: string;
-  readonly priceRange: string;
-  readonly rateRange: string;
   readonly buffRange: string;
   readonly reset: string;
-  readonly fillShared: string;
+  readonly fillPlayer: string;
   readonly validationSummary: string;
   readonly validationLevel: string;
-  readonly validationPrice: string;
-  readonly validationRate: string;
   readonly validationBuff: string;
   readonly noResult: string;
   readonly noResultHint: string;
@@ -137,9 +124,7 @@ export interface MiningToolState {
   readonly tradeExploitPercent: string;
 }
 
-type MiningPriceField = 'aiPerHash' | 'aiPerThousandTechScrap';
-type MiningWritableField = MiningPriceField | 'btcPerAi';
-type MiningPriceValues = Pick<MiningFormValues, MiningPriceField | 'btcPerAi'>;
+type MiningToolField = keyof MiningToolState;
 export type MiningSharedValues = Omit<
   MiningFormValues,
   'cortexBonusPercent' | 'tradeExploitPercent'
@@ -150,17 +135,6 @@ const defaultMiningToolState: MiningToolState = {
   cortexBonusPercent: BUFF_PERCENT_DEFAULT_STRING,
   tradeExploitPercent: BUFF_PERCENT_DEFAULT_STRING,
 };
-
-const miningPriceFields = [
-  'aiPerHash',
-  'btcPerAi',
-  'aiPerThousandTechScrap',
-] as const satisfies readonly MiningWritableField[];
-
-const miningPriceItems = {
-  aiPerHash: 'hash',
-  aiPerThousandTechScrap: 'tech-scrap',
-} as const satisfies Record<MiningPriceField, MarketPriceItemId>;
 
 function getSharedMiningLevel(snapshot: SharedUserInputs) {
   const stored = snapshot.progression.skills.find((skill) => skill.id === 'mining-skill');
@@ -182,80 +156,12 @@ export function selectMiningSharedValues(snapshot: SharedUserInputs): MiningShar
   };
 }
 
-/** 將共用設定帶入等級／物價欄位；刻意不觸碰工具自己的兩個 Buff。 */
-export function applyMiningSharedValues(
+/** 將玩家等級帶入目前試算；保留工具自己的 BUFF。 */
+export function applyMiningPlayerValues(
   current: MiningToolState,
   shared: MiningSharedValues,
 ): MiningToolState {
   return { ...current, miningLevel: shared.miningLevel };
-}
-
-/**
- * 將挖礦工具中的有效經濟設定回寫 Shared User Inputs。
- * 價格以 catalog 的預設基準貨幣保存；顯示值固定以 AI 供計算與編輯。
- */
-export function updateMiningSharedValue(
-  snapshot: SharedUserInputs,
-  field: MiningWritableField,
-  amount: number,
-): SharedUserInputs {
-  if (!Number.isFinite(amount) || amount < 0 || amount > Number.MAX_SAFE_INTEGER) {
-    return snapshot;
-  }
-
-  if (field === 'btcPerAi') {
-    if (!Number.isSafeInteger(amount) || amount < 1) return snapshot;
-
-    const definition = economyDataSet.payload.exchangeRates.find(
-      (rate) => rate.id === 'btc-per-ai',
-    );
-    if (!definition) return snapshot;
-
-    const ratesWithoutCurrent = snapshot.economy.exchangeRates.filter(
-      (rate) => rate.id !== 'btc-per-ai',
-    );
-    const nextRate = { id: 'btc-per-ai' as const, value: amount };
-
-    return {
-      ...snapshot,
-      economy: {
-        ...snapshot.economy,
-        exchangeRates: amount === definition.defaultValue
-          ? ratesWithoutCurrent
-          : [...ratesWithoutCurrent, nextRate],
-      },
-    };
-  }
-
-  const itemId = miningPriceItems[field];
-  const definition = getMarketPriceDefinition(itemId);
-  const currentPrices = resolveMarketPrices(snapshot);
-  const basisAmount = definition.defaultBasisCurrencyId === 'ai'
-    ? amount
-    : amount * currentPrices.btcPerAi;
-
-  if (!Number.isFinite(basisAmount) || basisAmount > Number.MAX_SAFE_INTEGER) {
-    return snapshot;
-  }
-
-  const pricesWithoutCurrent = snapshot.economy.prices.filter(
-    (price) => price.itemId !== itemId,
-  );
-  const nextPrice = {
-    itemId,
-    currencyId: definition.defaultBasisCurrencyId,
-    amount: basisAmount,
-  };
-
-  return {
-    ...snapshot,
-    economy: {
-      ...snapshot.economy,
-      prices: basisAmount === definition.defaultBasisValue
-        ? pricesWithoutCurrent
-        : [...pricesWithoutCurrent, nextPrice],
-    },
-  };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -314,15 +220,11 @@ export function normalizeMiningToolState(
 
 export function createMiningValues(
   toolState: MiningToolState,
-  priceDrafts: MiningPriceValues,
+  sharedValues: MiningSharedValues,
 ): MiningFormValues {
   return {
-    miningLevel: toolState.miningLevel,
-    aiPerHash: priceDrafts.aiPerHash,
-    btcPerAi: priceDrafts.btcPerAi,
-    aiPerThousandTechScrap: priceDrafts.aiPerThousandTechScrap,
-    cortexBonusPercent: toolState.cortexBonusPercent,
-    tradeExploitPercent: toolState.tradeExploitPercent,
+    ...sharedValues,
+    ...toolState,
   };
 }
 
@@ -349,11 +251,6 @@ function parseInteger(value: string, min: number, max: number): number | null {
   if (!Number.isSafeInteger(parsed) || parsed < min || parsed > max) return null;
 
   return parsed;
-}
-
-function parseMiningWritableValue(field: MiningWritableField, value: string): number | null {
-  if (field === 'btcPerAi') return parseInteger(value, 1, Number.MAX_SAFE_INTEGER);
-  return parseNonNegativeNumber(value);
 }
 
 export function parseMiningValues(values: MiningFormValues): {
@@ -411,8 +308,8 @@ interface MiningContextValue {
   readonly errors: MiningErrors;
   readonly inputs: MiningInputs | null;
   readonly result: MiningCalculation | null;
-  readonly setValue: (field: MiningField, value: string) => void;
-  readonly fillFromShared: () => void;
+  readonly setValue: (field: MiningToolField, value: string) => void;
+  readonly fillPlayer: () => void;
   readonly reset: () => void;
 }
 
@@ -446,90 +343,21 @@ export function MiningToolProvider({ children }: { children: ReactNode }) {
       },
     },
   );
-  const [priceDrafts, setPriceDrafts] = useState<MiningPriceValues>(() => {
-    const defaults = selectMiningSharedValues(defaultSharedUserInputs);
-    return {
-      aiPerHash: defaults.aiPerHash,
-      btcPerAi: defaults.btcPerAi,
-      aiPerThousandTechScrap: defaults.aiPerThousandTechScrap,
-    };
-  });
-  const [dirtyFields, setDirtyFields] = useState<ReadonlySet<MiningWritableField>>(
-    () => new Set(),
-  );
   const sharedValues = useMemo(
     () => selectMiningSharedValues(sharedSnapshot),
     [sharedSnapshot],
   );
 
-  useEffect(() => {
-    let cancelled = false;
-    queueMicrotask(() => {
-      if (cancelled) return;
-
-      setPriceDrafts((current) => {
-        let next: MiningPriceValues | null = null;
-
-        for (const field of miningPriceFields) {
-          if (!dirtyFields.has(field) && current[field] !== sharedValues[field]) {
-            next = { ...(next ?? current), [field]: sharedValues[field] };
-          }
-        }
-
-        return next ?? current;
-      });
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [dirtyFields, sharedValues]);
-
   const setValue = useCallback(
-    (field: MiningField, value: string) => {
-      if (
-        field === 'miningLevel' ||
-        field === 'cortexBonusPercent' ||
-        field === 'tradeExploitPercent'
-      ) {
-        setToolState((current) => ({ ...current, [field]: value }));
-        return;
-      }
-
-      setPriceDrafts((current) => ({ ...current, [field]: value }));
-      setDirtyFields((current) => {
-        const next = new Set(current);
-        next.add(field);
-        return next;
-      });
-
-      const parsed = parseMiningWritableValue(field, value);
-      if (parsed === null) return;
-
-      const accepted = sharedStore.update((current) =>
-        updateMiningSharedValue(current, field, parsed),
-      );
-      if (!accepted) return;
-
-      setDirtyFields((current) => {
-        if (!current.has(field)) return current;
-        const next = new Set(current);
-        next.delete(field);
-        return next;
-      });
+    (field: MiningToolField, value: string) => {
+      setToolState((current) => ({ ...current, [field]: value }));
     },
-    [setToolState, sharedStore],
+    [setToolState],
   );
 
-  const fillFromShared = useCallback(() => {
+  const fillPlayer = useCallback(() => {
     const latestSharedValues = selectMiningSharedValues(sharedStore.getSnapshot());
-    setToolState((current) => applyMiningSharedValues(current, latestSharedValues));
-    setPriceDrafts({
-      aiPerHash: latestSharedValues.aiPerHash,
-      btcPerAi: latestSharedValues.btcPerAi,
-      aiPerThousandTechScrap: latestSharedValues.aiPerThousandTechScrap,
-    });
-    setDirtyFields(new Set());
+    setToolState((current) => applyMiningPlayerValues(current, latestSharedValues));
   }, [setToolState, sharedStore]);
 
   const reset = useCallback(() => {
@@ -540,17 +368,11 @@ export function MiningToolProvider({ children }: { children: ReactNode }) {
       cortexBonusPercent: defaultMiningToolState.cortexBonusPercent,
       tradeExploitPercent: defaultMiningToolState.tradeExploitPercent,
     });
-    setPriceDrafts({
-      aiPerHash: latestSharedValues.aiPerHash,
-      btcPerAi: latestSharedValues.btcPerAi,
-      aiPerThousandTechScrap: latestSharedValues.aiPerThousandTechScrap,
-    });
-    setDirtyFields(new Set());
   }, [setToolState, sharedStore]);
 
   const values = useMemo(
-    () => createMiningValues(toolState, priceDrafts),
-    [priceDrafts, toolState],
+    () => createMiningValues(toolState, sharedValues),
+    [sharedValues, toolState],
   );
   const calculation = useMemo(() => calculateMiningTool(values), [values]);
   const contextValue = useMemo(
@@ -560,10 +382,10 @@ export function MiningToolProvider({ children }: { children: ReactNode }) {
       inputs: calculation.inputs,
       result: calculation.result,
       setValue,
-      fillFromShared,
+      fillPlayer,
       reset,
     }),
-    [calculation, fillFromShared, reset, setValue, values],
+    [calculation, fillPlayer, reset, setValue, values],
   );
 
   return (
@@ -587,42 +409,8 @@ function getErrorMessage(
 ) {
   const error = errors[field];
   if (error === 'level') return labels.validationLevel;
-  if (error === 'price') return labels.validationPrice;
-  if (error === 'rate') return labels.validationRate;
   if (error === 'buff') return labels.validationBuff;
   return undefined;
-}
-
-function MiningPriceField({
-  field,
-  id,
-  label,
-  unit,
-  labels,
-}: {
-  field: MiningPriceField;
-  id: string;
-  label: string;
-  unit: string;
-  labels: MiningToolLabels;
-}) {
-  const { values, errors, setValue } = useMiningTool();
-
-  return (
-    <ToolInputField
-      id={id}
-      label={label}
-      type="number"
-      inputMode="decimal"
-      min="0"
-      step="any"
-      value={values[field]}
-      onChange={(event) => setValue(field, event.target.value)}
-      error={getErrorMessage(field, errors, labels)}
-      range={labels.priceRange}
-      unit={unit}
-    />
-  );
 }
 
 function MiningSettingField({
@@ -632,95 +420,75 @@ function MiningSettingField({
   unit,
   labels,
 }: {
-  field: 'btcPerAi' | 'cortexBonusPercent' | 'tradeExploitPercent';
+  field: 'cortexBonusPercent' | 'tradeExploitPercent';
   id: string;
   label: string;
   unit: string;
   labels: MiningToolLabels;
 }) {
   const { values, errors, setValue } = useMiningTool();
-  const isRate = field === 'btcPerAi';
-
-  if (!isRate) {
-    return (
-      <ToolBuffSliderField
-        id={id}
-        label={label}
-        range={labels.buffRange}
-        unit={unit}
-        value={values[field]}
-        onValueChange={(value) => setValue(field, String(value))}
-        error={getErrorMessage(field, errors, labels)}
-      />
-    );
-  }
 
   return (
-    <ToolInputField
+    <ToolBuffSliderField
       id={id}
       label={label}
-      type="number"
-      inputMode="numeric"
-      min={isRate ? 1 : 0}
-      max={isRate ? undefined : 100}
-      step="1"
-      value={values[field]}
-      onChange={(event) => setValue(field, event.target.value)}
-      error={getErrorMessage(field, errors, labels)}
-      range={isRate ? labels.rateRange : labels.buffRange}
+      range={labels.buffRange}
       unit={unit}
+      value={values[field]}
+      onValueChange={(value) => setValue(field, String(value))}
+      error={getErrorMessage(field, errors, labels)}
     />
   );
 }
 
-export function MiningSettingsPanel({
+function MiningSharedPriceField({
   labels,
-  idPrefix = 'mining-settings',
+  locale,
 }: {
   labels: MiningToolLabels;
-  idPrefix?: string;
+  locale: Locale;
 }) {
-  const { reset } = useMiningTool();
+  const { values } = useMiningTool();
+  const store = useSharedUserInputsStore();
+  const sharedFields = getSharedFieldPresentation(locale);
+  return (
+    <ToolSharedNumberField
+      id="mining-hash-price"
+      label={labels.hashPrice}
+      sharedLabel={sharedFields.sharedLabel}
+      value={values.aiPerHash}
+      min={0}
+      integer={false}
+      unit={labels.hashPriceUnit}
+      range={sharedFields.priceRange}
+      invalidValueMessage={sharedFields.invalidValueMessage}
+      onValueChange={(value) => store.update((current) =>
+        updateSharedMarketPrice(current, 'hash', 'ai', value),
+      )}
+    />
+  );
+}
+
+function MiningSharedExchangeRateField({ locale }: { locale: Locale }) {
+  const { values } = useMiningTool();
+  const store = useSharedUserInputsStore();
+  const sharedFields = getSharedFieldPresentation(locale);
 
   return (
-    <div className="flex h-full flex-col gap-6 p-4">
-      <div>
-        <h2 className="font-semibold text-foreground">{labels.settingsTitle}</h2>
-      </div>
-
-      <div className="space-y-4">
-        <h3 className="text-sm font-medium text-foreground">{labels.prices}</h3>
-        <MiningPriceField
-          field="aiPerThousandTechScrap"
-          id={idPrefix + '-tech-scrap-price'}
-          label={labels.techScrapPrice}
-          unit={labels.techScrapPriceUnit}
-          labels={labels}
-        />
-      </div>
-
-      <div className="space-y-4">
-        <h3 className="text-sm font-medium text-foreground">{labels.buffs}</h3>
-        <MiningSettingField
-          field="cortexBonusPercent"
-          id={idPrefix + '-cortex-bonus'}
-          label={labels.cortexBonus}
-          unit={labels.percentUnit}
-          labels={labels}
-        />
-      </div>
-
-      <div className="mt-auto border-t border-border pt-4">
-        <ToolPresetButton
-          type="button"
-          variant="outline"
-          className="w-full"
-          onClick={reset}
-          icon={<RotateCcw aria-hidden="true" />}
-          label={labels.reset}
-        />
-      </div>
-    </div>
+    <ToolSharedNumberField
+      id="mining-btc-per-ai"
+      label={sharedFields.exchangeRate.label}
+      sharedLabel={sharedFields.sharedLabel}
+      value={values.btcPerAi}
+      min={1}
+      integer
+      unit={sharedFields.exchangeRate.unit}
+      range={sharedFields.exchangeRate.range}
+      invalidValueMessage={sharedFields.invalidValueMessage}
+      onValueChange={(value) => store.update((current) =>
+        updateSharedExchangeRate(current, value),
+      )}
+    />
   );
 }
 
@@ -1132,7 +900,7 @@ export function MiningCalculator({
   locale: Locale;
   numberFormatter?: NumberFormatter;
 }) {
-  const { errors, inputs, result, fillFromShared } = useMiningTool();
+  const { errors, inputs, result, fillPlayer, reset } = useMiningTool();
   const hasErrors = Object.keys(errors).length > 0;
   const formatNumber = useMemo(
     () => numberFormatter ?? createNumberFormatter(locale),
@@ -1147,40 +915,40 @@ export function MiningCalculator({
             <div>
               <CardTitle className="site-tool-section-heading">{labels.primaryInputs}</CardTitle>
             </div>
-            <ToolPresetButton
-              type="button"
-              variant="outline"
-              onClick={fillFromShared}
-              icon={<Download aria-hidden="true" />}
-              label={labels.fillShared}
+            <ToolPrimaryActions
+              fillPlayer={{ label: labels.fillPlayer, onClick: fillPlayer }}
+              onReset={reset}
+              resetLabel={labels.reset}
             />
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-8">
           <div className="@container">
             <div className="grid gap-5 @min-[24rem]:grid-cols-2 @min-[72rem]:grid-cols-4">
               <MiningLevelField labels={labels} />
-              <MiningPriceField
-                field="aiPerHash"
-                id="mining-hash-price"
-                label={labels.hashPrice}
-                unit={labels.hashPriceUnit}
-                labels={labels}
-              />
-              <MiningSettingField
-                field="btcPerAi"
-                id="mining-btc-per-ai"
-                label={labels.btcPerAi}
-                unit={labels.btcPerAiUnit}
-                labels={labels}
-              />
-              <MiningSettingField
-                field="tradeExploitPercent"
-                id="mining-trade-exploit"
-                label={labels.tradeExploit}
-                unit={labels.percentUnit}
-                labels={labels}
-              />
+              <MiningSharedPriceField labels={labels} locale={locale} />
+              <MiningSharedExchangeRateField locale={locale} />
+            </div>
+          </div>
+          <div>
+            <h3 className="mb-4 text-sm font-medium text-foreground">{labels.buffs}</h3>
+            <div className="@container">
+              <div className="grid gap-5 @min-[24rem]:grid-cols-2">
+                <MiningSettingField
+                  field="tradeExploitPercent"
+                  id="mining-trade-exploit"
+                  label={labels.tradeExploit}
+                  unit={labels.percentUnit}
+                  labels={labels}
+                />
+                <MiningSettingField
+                  field="cortexBonusPercent"
+                  id="mining-cortex-bonus"
+                  label={labels.cortexBonus}
+                  unit={labels.percentUnit}
+                  labels={labels}
+                />
+              </div>
             </div>
           </div>
         </CardContent>
@@ -1214,7 +982,6 @@ export function MiningToolPage({
   contextLabel,
   contextPanelLabel,
   contextCloseLabel,
-  labels,
   header,
   headerActions,
   children,
@@ -1234,17 +1001,6 @@ export function MiningToolPage({
         contextCloseLabel={contextCloseLabel}
         header={header}
         headerActions={headerActions}
-        settings={{
-          id: 'settings',
-          label: labels.settingsTab,
-          title: labels.settingsTitle,
-          openLabel: labels.openSettings,
-          closeLabel: labels.closeSettings,
-          idPrefix: 'mining-settings',
-          render: ({ idPrefix }) => (
-            <MiningSettingsPanel labels={labels} idPrefix={idPrefix} />
-          ),
-        }}
       >
         {children}
       </ToolPage>

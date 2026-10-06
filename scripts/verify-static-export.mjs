@@ -74,6 +74,295 @@ function assertExcludes(value, unexpected, description) {
   }
 }
 
+function getArrayLiteralBody(source, property, description) {
+  const marker = `${property}={[`;
+  const markerIndex = source.indexOf(marker);
+  if (markerIndex < 0) throw new Error(`${description} 缺少 ${property} 陣列`);
+
+  const openIndex = markerIndex + marker.length - 1;
+  let depth = 0;
+  let quote;
+  let escaped = false;
+
+  for (let index = openIndex; index < source.length; index += 1) {
+    const character = source[index];
+    if (quote) {
+      if (escaped) escaped = false;
+      else if (character === '\\') escaped = true;
+      else if (character === quote) quote = undefined;
+      continue;
+    }
+
+    if (character === "'" || character === '"' || character === '`') {
+      quote = character;
+    } else if (character === '[') {
+      depth += 1;
+    } else if (character === ']') {
+      depth -= 1;
+      if (depth === 0) return source.slice(openIndex + 1, index);
+    }
+  }
+
+  throw new Error(`${description} 的 ${property} 陣列未閉合`);
+}
+
+function readJsxTag(source, start) {
+  if (source.startsWith('<>', start)) {
+    return { end: start + 2, closing: false, selfClosing: false };
+  }
+  if (source.startsWith('</>', start)) {
+    return { end: start + 3, closing: true, selfClosing: false };
+  }
+  if (source[start] !== '<') return undefined;
+
+  let cursor = start + 1;
+  const closing = source[cursor] === '/';
+  if (closing) cursor += 1;
+  if (!/[A-Za-z]/.test(source[cursor] ?? '')) return undefined;
+
+  let quote;
+  let escaped = false;
+  for (; cursor < source.length; cursor += 1) {
+    const character = source[cursor];
+    if (quote) {
+      if (escaped) escaped = false;
+      else if (character === '\\') escaped = true;
+      else if (character === quote) quote = undefined;
+    } else if (character === "'" || character === '"') {
+      quote = character;
+    } else if (character === '>') {
+      return {
+        end: cursor + 1,
+        closing,
+        selfClosing: source[cursor - 1] === '/',
+      };
+    }
+  }
+
+  return undefined;
+}
+
+function splitTopLevelCommaSeparated(source) {
+  const parts = [];
+  let depth = 0;
+  let jsxDepth = 0;
+  let start = 0;
+  let quote;
+  let escaped = false;
+
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source[index];
+    if (quote) {
+      if (escaped) escaped = false;
+      else if (character === '\\') escaped = true;
+      else if (character === quote) quote = undefined;
+      continue;
+    }
+
+    if (character === '<') {
+      const tag = readJsxTag(source, index);
+      if (tag) {
+        if (tag.closing) jsxDepth = Math.max(0, jsxDepth - 1);
+        else if (!tag.selfClosing) jsxDepth += 1;
+        index = tag.end - 1;
+        continue;
+      }
+    }
+
+    if (jsxDepth > 0) continue;
+
+    if (character === "'" || character === '"' || character === '`') {
+      quote = character;
+    } else if (character === '[' || character === '{' || character === '(') {
+      depth += 1;
+    } else if (character === ']' || character === '}' || character === ')') {
+      depth -= 1;
+    } else if (character === ',' && depth === 0) {
+      parts.push(source.slice(start, index).trim());
+      start = index + 1;
+    }
+  }
+
+  const lastPart = source.slice(start).trim();
+  if (lastPart) parts.push(lastPart);
+  return parts;
+}
+
+function assertToolOverviewSourceTable(
+  source,
+  description,
+  expectedColumnHeaders,
+  expectedColumnWidths,
+  expectedRows,
+  expectedMinWidth,
+) {
+  const columns = splitTopLevelCommaSeparated(
+    getArrayLiteralBody(source, 'columns', description),
+  );
+  if (columns.length !== expectedColumnHeaders.length) {
+    throw new Error(
+      `${description} 的 DataTable 應有 ${expectedColumnHeaders.length} 欄，實際為 ${columns.length} 欄`,
+    );
+  }
+  const columnHeaders = columns.map((column) => column.match(/\blabel:\s*'([^']+)'/)?.[1]);
+  if (columnHeaders.some((header, index) => header !== expectedColumnHeaders[index])) {
+    throw new Error(
+      `${description} 的欄名應為 ${expectedColumnHeaders.join('、')}，實際為 ${columnHeaders.join('、')}`,
+    );
+  }
+  const columnWidths = columns.map((column) => column.match(/\bwidth:\s*'([^']+)'/)?.[1]);
+  if (columnWidths.some((width, index) => width !== expectedColumnWidths[index])) {
+    throw new Error(
+      `${description} 的欄寬應為 ${expectedColumnWidths.join('、')}，實際為 ${columnWidths.join('、')}`,
+    );
+  }
+  if (!source.includes(`tableClassName="min-w-[${expectedMinWidth}] table-fixed"`)) {
+    throw new Error(`${description} 的表格最小寬度應為 ${expectedMinWidth}`);
+  }
+  if (!source.includes('stickyFirstColumn')) {
+    throw new Error(`${description} 應保留 sticky 首欄`);
+  }
+
+  const rows = splitTopLevelCommaSeparated(
+    getArrayLiteralBody(source, 'rows', description),
+  );
+  if (rows.length !== 2 || rows.length !== expectedRows.length) {
+    throw new Error(`${description} 應有主要輸入、共用設定 2 列`);
+  }
+
+  rows.forEach((row, index) => {
+    const normalizedRow = row.trim();
+    if (!normalizedRow.startsWith('[') || !normalizedRow.endsWith(']')) {
+      throw new Error(`${description} 第 ${index + 1} 列不是欄位陣列`);
+    }
+
+    const cells = splitTopLevelCommaSeparated(normalizedRow.slice(1, -1));
+    if (cells.length !== expectedColumnHeaders.length) {
+      throw new Error(
+        `${description} 第 ${index + 1} 列應有 ${expectedColumnHeaders.length} 格，實際為 ${cells.length} 格`,
+      );
+    }
+    cells.forEach((cell, cellIndex) => {
+      const expectedCell = `'${expectedRows[index][cellIndex]}'`;
+      if (cell.trim() !== expectedCell) {
+        throw new Error(
+          `${description} 第 ${index + 1} 列第 ${cellIndex + 1} 格應為 ${expectedCell}，實際為 ${cell}`,
+        );
+      }
+    });
+  });
+}
+
+function getRenderedTableHtmlByAriaLabel(html, ariaLabel, description) {
+  const tables = html.matchAll(/<table\b([^>]*)>([\s\S]*?)<\/table>/gi);
+  const table = [...tables].find(([, attributes]) =>
+    attributes.includes(`aria-label="${ariaLabel}"`),
+  );
+  if (!table) throw new Error(`${description} 找不到 aria-label=${ariaLabel} 的表格`);
+
+  return table[0];
+}
+
+function assertRenderedTableRowsHaveColumnCount(
+  html,
+  ariaLabel,
+  expectedColumnHeaders,
+  expectedColumnWidths,
+  expectedRows,
+  description,
+) {
+  const expectedColumns = expectedColumnHeaders.length;
+  const table = getRenderedTableHtmlByAriaLabel(html, ariaLabel, description);
+  const columns = [...table.matchAll(/<col\b([^>]*)>/gi)];
+  const columnWidths = columns.map(([, attributes]) =>
+    attributes.match(/\bstyle="width:([^;"]+)/)?.[1],
+  );
+  if (columnWidths.length !== expectedColumns || columnWidths.some(
+    (width, index) => width !== expectedColumnWidths[index],
+  )) {
+    throw new Error(
+      `${description} 的輸出欄寬應為 ${expectedColumnWidths.join('、')}，實際為 ${columnWidths.join('、')}`,
+    );
+  }
+
+  const rows = [...table.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)];
+  if (rows.length !== expectedRows.length + 1) {
+    throw new Error(
+      `${description} 應有 1 列表頭與 ${expectedRows.length} 列資料，實際共 ${rows.length} 列`,
+    );
+  }
+  rows.forEach(([, content], index) => {
+    const cellCount = content.match(/<(?:th|td)\b/gi)?.length ?? 0;
+    if (cellCount !== expectedColumns) {
+      throw new Error(
+        `${description} 第 ${index + 1} 列應有 ${expectedColumns} 格，實際為 ${cellCount} 格`,
+      );
+    }
+    const cells = [...content.matchAll(/<(?:th|td)\b[^>]*>([\s\S]*?)<\/(?:th|td)>/gi)];
+    const cellTexts = cells.map(([, cell]) => cell
+      .replace(/<[^>]*>/g, '')
+      .replace(/&amp;/g, '&')
+      .replace(/&quot;/g, '"')
+      .replace(/&#x27;|&#39;/g, "'")
+      .replace(/\s+/g, ' ')
+      .trim());
+    if (index === 0) {
+      if (cellTexts.some((cell, cellIndex) => cell !== expectedColumnHeaders[cellIndex])) {
+        throw new Error(
+          `${description} 表頭應為 ${expectedColumnHeaders.join('、')}，實際為 ${cellTexts.join('、')}`,
+        );
+      }
+    } else {
+      const expectedRow = expectedRows[index - 1];
+      if (cellTexts.some((cell, cellIndex) => cell !== expectedRow[cellIndex])) {
+        throw new Error(
+          `${description} 第 ${index} 列內容應為 ${expectedRow.join('｜')}，實際為 ${cellTexts.join('｜')}`,
+        );
+      }
+    }
+  });
+}
+
+for (const [fileName, description, expectedColumnHeaders, expectedRows] of [
+  [
+    'index.mdx',
+    '繁中工具總覽來源',
+    ['輸入類型', '用途', '位置'],
+    [
+      ['主要輸入', '調整本次試算條件', '工具頁的主要輸入區塊'],
+      ['共用設定', '管理玩家、裝備與物價', '點擊「玩家與計算設定」圖示'],
+    ],
+  ],
+  [
+    'index.zh-cn.mdx',
+    '簡中工具總覽來源',
+    ['输入类型', '用途', '位置'],
+    [
+      ['主要输入', '调整本次试算条件', '工具页的主要输入区块'],
+      ['共享设置', '管理玩家、装备与物价', '点击“玩家与计算设置”图标'],
+    ],
+  ],
+  [
+    'index.en.mdx',
+    '英文工具總覽來源',
+    ['Input type', 'Purpose', 'Location'],
+    [
+      ['Primary inputs', 'Adjust this calculation’s inputs', 'Main input section on the tool page'],
+      ['Shared settings', 'Manage player, equipment, and prices', 'Click the “Player & calculation settings” icon'],
+    ],
+  ],
+]) {
+  const source = await readFile(path.join(projectRoot, 'content', 'tools', fileName), 'utf8');
+  assertToolOverviewSourceTable(
+    source,
+    description,
+    expectedColumnHeaders,
+    ['10rem', '16rem', '22rem'],
+    expectedRows,
+    '48rem',
+  );
+}
+
 function assertMetadata(html, key, expected) {
   const tags = html.match(/<meta\b[^>]*>/gi) ?? [];
   const found = tags.some((tag) => {
@@ -198,6 +487,7 @@ const requiredFiles = [
   'zh-tw/recommendations/index.html',
   'zh-cn/recommendations/index.html',
   'en/recommendations/index.html',
+  'images/brand/ciallo-banner.webp',
   'api/search',
   'llms.txt',
   'llms-full.txt',
@@ -363,6 +653,7 @@ const buffsAndItemsPage = await readOutput('zh-tw/guides/buffs-and-items/index.h
 const aboutPage = await readOutput('zh-tw/about/index.html');
 const privacyPage = await readOutput('zh-tw/about/privacy/index.html');
 const recommendationsPage = await readOutput('zh-tw/recommendations/index.html');
+const simplifiedChineseRecommendationsPage = await readOutput('zh-cn/recommendations/index.html');
 const englishAboutPage = await readOutput('en/about/index.html');
 const englishPrivacyPage = await readOutput('en/about/privacy/index.html');
 const simplifiedChinesePrivacyPage = await readOutput('zh-cn/about/privacy/index.html');
@@ -667,7 +958,31 @@ for (const { locale, page, expected } of privacySubmissionAssertions) {
   }
 }
 assertIncludes(englishRecommendationsPage, 'Official Discord', '英文推薦卡片名稱');
-assertIncludes(await readOutput('zh-cn/recommendations/index.html'), '官方 Discord', '簡中推薦卡片名稱');
+assertIncludes(simplifiedChineseRecommendationsPage, '官方 Discord', '簡中推薦卡片名稱');
+const recommendationsBannerPath = publicPath('/images/brand/ciallo-banner.webp');
+for (const [page, description] of [
+  [recommendationsPage, '繁中推薦頁'],
+  [simplifiedChineseRecommendationsPage, '簡中推薦頁'],
+  [englishRecommendationsPage, '英文推薦頁'],
+]) {
+  const directBannerPosition = page.indexOf(recommendationsBannerPath);
+  const encodedBannerPosition = page.indexOf(encodeURIComponent(recommendationsBannerPath));
+  const bannerPosition = Math.max(directBannerPosition, encodedBannerPosition);
+  if (bannerPosition < 0) {
+    throw new Error(`${description} 未引用 Pages banner 資產：${recommendationsBannerPath}`);
+  }
+  const heroStart = page.lastIndexOf('<header', bannerPosition);
+  const heroEnd = page.indexOf('</header>', heroStart);
+  const hero = page.slice(heroStart, heroEnd);
+  if (!hero.includes(recommendationsBannerPath)
+    && !hero.includes(encodeURIComponent(recommendationsBannerPath))) {
+    throw new Error(`${description} 未載入 Pages 子路徑下的推薦 banner：${recommendationsBannerPath}`);
+  }
+  assertIncludes(hero, 'aria-hidden="true"', `${description} 裝飾圖可及性`);
+  assertIncludes(hero, 'alt=""', `${description} 裝飾圖替代文字`);
+  assertIncludes(hero, 'object-position:75% 44%', `${description} banner 焦點位置`);
+  assertIncludes(hero, 'max-w-5xl px-6 sm:px-10', `${description} banner 框架寬度`);
+}
 assertIncludes(recommendationsPage, '值得收藏的工具、資料與社群網站。', '推薦頁 description');
 assertIncludes(recommendationsPage, '網站推薦', '推薦頁網站推薦標題');
 assertExcludes(
@@ -744,28 +1059,84 @@ for (const [page, description, removedNote] of [
   assertExcludes(page, removedNote, '玩家設定已移除的瀏覽器儲存提示');
 }
 for (const page of [toolPage, simplifiedToolPage, englishToolPage]) {
-  assertIncludes(page, 'min-w-[70rem]', '工具輸入位置表格最小寬度');
+  assertIncludes(page, 'min-w-[48rem]', '工具輸入位置表格最小寬度');
   assertIncludes(page, 'overflow-x-auto', '工具輸入位置表格水平捲動');
+}
+for (const [page, ariaLabel, description, columnHeaders, rows] of [
+  [
+    toolPage,
+    '工具輸入位置',
+    '繁中工具總覽表格',
+    ['輸入類型', '用途', '位置'],
+    [
+      ['主要輸入', '調整本次試算條件', '工具頁的主要輸入區塊'],
+      ['共用設定', '管理玩家、裝備與物價', '點擊「玩家與計算設定」圖示'],
+    ],
+  ],
+  [
+    simplifiedToolPage,
+    '工具输入位置',
+    '簡中工具總覽表格',
+    ['输入类型', '用途', '位置'],
+    [
+      ['主要输入', '调整本次试算条件', '工具页的主要输入区块'],
+      ['共享设置', '管理玩家、装备与物价', '点击“玩家与计算设置”图标'],
+    ],
+  ],
+  [
+    englishToolPage,
+    'Tool input locations',
+    '英文工具總覽表格',
+    ['Input type', 'Purpose', 'Location'],
+    [
+      ['Primary inputs', 'Adjust this calculation’s inputs', 'Main input section on the tool page'],
+      ['Shared settings', 'Manage player, equipment, and prices', 'Click the “Player & calculation settings” icon'],
+    ],
+  ],
+]) {
+  assertRenderedTableRowsHaveColumnCount(
+    page,
+    ariaLabel,
+    columnHeaders,
+    ['10rem', '16rem', '22rem'],
+    rows,
+    description,
+  );
 }
 assertIncludes(toolPage, '僅儲存在目前瀏覽器', '工具總覽隱私說明');
 assertIncludes(toolPage, '不會送到伺服器', '工具總覽隱私說明');
 assertIncludes(englishToolPage, 'stored only in the current browser', '英文工具總覽隱私說明');
 assertIncludes(englishToolPage, 'not sent to a server', '英文工具總覽隱私說明');
 for (const expected of [
-  'Player &amp; calculation settings',
-  'Manage player, equipment, and calculation data that multiple tools can reuse',
-  'At the bottom of the left sidebar, above the language selector',
-  'Click the player and gear icons in the top CCO Toolkit bar',
+  '目前 8 個工具側欄只保留目錄（TOC）；輸入集中在以下兩處：',
+  '標示「共用」的欄位與共用設定同步，修改會套用至其他工具。',
+  '「重設本工具」只還原本工具試算欄位、模式、BUFF 預設值或表單／篩選狀態，不修改共用資料，也不清除背包庫存或開箱紀錄。',
 ]) {
-  assertIncludes(englishToolPage, expected, '英文工具總覽玩家與計算設定列');
+  assertIncludes(toolPage, expected, '繁中工具總覽輸入位置與重設說明');
 }
 for (const expected of [
-  '玩家与计算设置',
-  '管理可供多个工具沿用的玩家、装备与计算数据',
-  '位于左侧栏底部、语言选单上方',
-  '点击顶端 CCO Toolkit 栏中的玩家与齿轮图标',
+  '目前 8 个工具侧栏只保留目录（TOC）；输入集中在以下两处：',
+  '标记为“共享”的字段与共享设置同步，修改会应用到其他工具。',
+  '“重置本工具”只还原本工具试算字段、模式、默认 BUFF 或表单／筛选状态，不修改共享数据，也不清除背包库存或开箱记录。',
 ]) {
-  assertIncludes(simplifiedToolPage, expected, '簡中工具總覽玩家與計算設定列');
+  assertIncludes(simplifiedToolPage, expected, '簡中工具總覽輸入位置與重設說明');
+}
+for (const expected of [
+  'The sidebars of all eight tools currently contain only the table of contents (TOC); inputs are available in these two places:',
+  'Fields marked “Shared” sync with shared settings, and changes apply to other tools.',
+  '<strong>Reset this tool</strong> restores only that tool&#x27;s trial inputs, mode, default buffs, or form and filter state; it does not change shared data or clear backpack inventory or loot-box records.',
+]) {
+  assertIncludes(englishToolPage, expected, '英文工具總覽輸入位置與重設說明');
+}
+for (const [page, ariaLabel, description, obsoleteDescriptions] of [
+  [toolPage, '工具輸入位置', '繁中工具總覽表格', ['本工具設定']],
+  [simplifiedToolPage, '工具输入位置', '簡中工具總覽表格', ['本工具设置']],
+  [englishToolPage, 'Tool input locations', '英文工具總覽表格', ['Tool settings']],
+]) {
+  const renderedTable = getRenderedTableHtmlByAriaLabel(page, ariaLabel, description);
+  for (const obsoleteDescription of obsoleteDescriptions) {
+    assertExcludes(renderedTable, obsoleteDescription, `${description}已移除的舊側欄輸入說明`);
+  }
 }
 for (const [language, locale] of [['zh-TW', 'zh-tw'], ['zh-CN', 'zh-cn'], ['en', 'en']]) {
   const href = publicPath(`/${locale}/settings`);

@@ -8,7 +8,6 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { Download } from 'lucide-react';
 
 import { ContextSheet, type ContextualDocsPageProps } from '@/components/context';
 import {
@@ -19,7 +18,8 @@ import {
   ToolBuffSliderField,
   ToolInputField,
   ToolPage,
-  ToolPresetButton,
+  ToolPrimaryActions,
+  ToolSharedNumberField,
   ToolState,
 } from '@/components/tools';
 import {
@@ -72,6 +72,7 @@ import { resolveMarketPrices, type ResolvedMarketPrices } from '@/lib/market-pri
 import type { Locale } from '@/lib/i18n';
 import { createNumberFormatter, type NumberFormatter } from '@/lib/number-formatting';
 import {
+  clearToolState,
   defaultSharedUserInputs,
   type SharedUserInputs,
 } from '@/lib/storage';
@@ -82,6 +83,8 @@ import {
   formatMixedCrushingMessage,
   mixedCrushingUiLabels,
 } from './mixed-crushing-labels';
+import { updateSharedEquipmentNumber } from './shared-input-updates';
+import { getSharedFieldPresentation } from './shared-field-presentation';
 
 export interface EarningsOverviewToolLabels {
   readonly primaryInputs: string;
@@ -95,18 +98,16 @@ export interface EarningsOverviewToolLabels {
   readonly searchLevel: string;
   readonly printingLevel: string;
   readonly miningLevel: string;
-  readonly bargainPercent: string;
   readonly btcBuffPercent: string;
   readonly levelPlaceholder: string;
   readonly levelRange: string;
   readonly levelUnit: string;
-  readonly bargainRange: string;
   readonly buffRange: string;
   readonly percentUnit: string;
-  readonly fillShared: string;
+  readonly fillPlayer: string;
+  readonly reset: string;
   readonly validationSummary: string;
   readonly validationLevel: string;
-  readonly validationBargain: string;
   readonly validationBuff: string;
   readonly validationComparisonMode: string;
   readonly noResult: string;
@@ -155,27 +156,29 @@ export interface EarningsOverviewFormValues {
   readonly comparisonMode?: EarningsComparisonMode;
 }
 
-export type EarningsOverviewToolState = EarningsOverviewFormValues & {
+export type EarningsOverviewToolState = Omit<EarningsOverviewFormValues, 'bargainPercent'> & {
   readonly comparisonMode: EarningsComparisonMode;
   readonly mixedCrushingMode: MixedCrushingMode;
   readonly mixedMedicalCount: string;
   readonly mixedAmmunitionCount: string;
   readonly mixedMilitaryCount: string;
 };
-export type EarningsOverviewField = keyof EarningsOverviewFormValues;
+export type EarningsOverviewField = Exclude<keyof EarningsOverviewFormValues, 'bargainPercent'>;
+type EarningsOverviewErrorField = keyof EarningsOverviewFormValues;
 export type EarningsOverviewErrors = Partial<
-  Record<EarningsOverviewField, EarningsInputError | 'comparison-mode'>
+  Record<EarningsOverviewErrorField, EarningsInputError | 'comparison-mode'>
 >;
 export type EarningsOverviewSharedValues = Pick<
   EarningsOverviewFormValues,
   'searchLevel' | 'printingLevel' | 'miningLevel' | 'bargainPercent'
 >;
+export type EarningsOverviewCalculationValues = EarningsOverviewToolState &
+  Pick<EarningsOverviewFormValues, 'bargainPercent'>;
 
 const defaultEarningsOverviewToolState: EarningsOverviewToolState = {
   searchLevel: String(EARNINGS_LEVEL_MIN),
   printingLevel: String(EARNINGS_LEVEL_MIN),
   miningLevel: String(EARNINGS_LEVEL_MIN),
-  bargainPercent: '0',
   btcBuffPercent: BUFF_PERCENT_DEFAULT_STRING,
   comparisonMode: 'per-minute',
   mixedCrushingMode: 'recommended',
@@ -201,6 +204,17 @@ const legacyEarningsOverviewFieldsWithoutBuff = [
   'miningLevel',
   'bargainPercent',
 ] as const;
+const currentEarningsOverviewFields = [
+  'searchLevel',
+  'printingLevel',
+  'miningLevel',
+  'btcBuffPercent',
+] as const;
+const currentEarningsOverviewFieldsWithoutBuff = [
+  'searchLevel',
+  'printingLevel',
+  'miningLevel',
+] as const;
 const earningsOverviewStateFields = [
   ...legacyEarningsOverviewFields,
   'comparisonMode',
@@ -209,15 +223,37 @@ const earningsOverviewStateFieldsWithoutBuff = [
   ...legacyEarningsOverviewFieldsWithoutBuff,
   'comparisonMode',
 ] as const;
-const earningsOverviewStateFieldsWithMixedCrushing = [
+const currentEarningsOverviewStateFields = [
+  ...currentEarningsOverviewFields,
+  'comparisonMode',
+] as const;
+const currentEarningsOverviewStateFieldsWithoutBuff = [
+  ...currentEarningsOverviewFieldsWithoutBuff,
+  'comparisonMode',
+] as const;
+const legacyEarningsOverviewStateFieldsWithMixedCrushing = [
   ...earningsOverviewStateFields,
   'mixedCrushingMode',
   'mixedMedicalCount',
   'mixedAmmunitionCount',
   'mixedMilitaryCount',
 ] as const;
-const earningsOverviewStateFieldsWithoutBuffWithMixedCrushing = [
+const legacyEarningsOverviewStateFieldsWithoutBuffWithMixedCrushing = [
   ...earningsOverviewStateFieldsWithoutBuff,
+  'mixedCrushingMode',
+  'mixedMedicalCount',
+  'mixedAmmunitionCount',
+  'mixedMilitaryCount',
+] as const;
+const earningsOverviewStateFieldsWithMixedCrushing = [
+  ...currentEarningsOverviewStateFields,
+  'mixedCrushingMode',
+  'mixedMedicalCount',
+  'mixedAmmunitionCount',
+  'mixedMilitaryCount',
+] as const;
+const earningsOverviewStateFieldsWithoutBuffWithMixedCrushing = [
+  ...currentEarningsOverviewStateFieldsWithoutBuff,
   'mixedCrushingMode',
   'mixedMedicalCount',
   'mixedAmmunitionCount',
@@ -251,7 +287,6 @@ function withMixedCrushingDefaults(
     searchLevel: value.searchLevel,
     printingLevel: value.printingLevel,
     miningLevel: value.miningLevel,
-    bargainPercent: value.bargainPercent,
     btcBuffPercent: normalizeLegacyBuffPercentString(value.btcBuffPercent)
       ?? defaultEarningsOverviewToolState.btcBuffPercent,
     comparisonMode,
@@ -304,9 +339,30 @@ export function normalizeEarningsOverviewToolState(
     return withMixedCrushingDefaults({ ...value, btcBuffPercent }, 'per-minute');
   }
 
+  if (hasStringFields(value, currentEarningsOverviewFields)) {
+    return withMixedCrushingDefaults(value, 'per-minute');
+  }
+
+  if (hasStringFields(value, currentEarningsOverviewFieldsWithoutBuff)) {
+    return withMixedCrushingDefaults({ ...value, btcBuffPercent }, 'per-minute');
+  }
+
   if (hasStringFields(value, earningsOverviewStateFields)) {
     if (!isEarningsComparisonMode(value.comparisonMode)) return undefined;
     return withMixedCrushingDefaults(value, value.comparisonMode);
+  }
+
+  if (hasStringFields(value, legacyEarningsOverviewStateFieldsWithMixedCrushing)) {
+    if (!isEarningsComparisonMode(value.comparisonMode)) return undefined;
+    return withMixedCrushingDefaults(value, value.comparisonMode);
+  }
+
+  if (hasStringFields(value, legacyEarningsOverviewStateFieldsWithoutBuffWithMixedCrushing)) {
+    if (!isEarningsComparisonMode(value.comparisonMode)) return undefined;
+    return withMixedCrushingDefaults(
+      { ...value, btcBuffPercent },
+      value.comparisonMode,
+    );
   }
 
   if (hasStringFields(value, earningsOverviewStateFieldsWithMixedCrushing)) {
@@ -316,10 +372,17 @@ export function normalizeEarningsOverviewToolState(
 
   if (hasStringFields(value, earningsOverviewStateFieldsWithoutBuffWithMixedCrushing)) {
     if (!isEarningsComparisonMode(value.comparisonMode)) return undefined;
-    return withMixedCrushingDefaults(
-      { ...value, btcBuffPercent },
-      value.comparisonMode,
-    );
+    return withMixedCrushingDefaults({ ...value, btcBuffPercent }, value.comparisonMode);
+  }
+
+  if (hasStringFields(value, currentEarningsOverviewStateFields)) {
+    if (!isEarningsComparisonMode(value.comparisonMode)) return undefined;
+    return withMixedCrushingDefaults(value, value.comparisonMode);
+  }
+
+  if (hasStringFields(value, currentEarningsOverviewStateFieldsWithoutBuff)) {
+    if (!isEarningsComparisonMode(value.comparisonMode)) return undefined;
+    return withMixedCrushingDefaults({ ...value, btcBuffPercent }, value.comparisonMode);
   }
 
   if (!hasStringFields(value, earningsOverviewStateFieldsWithoutBuff)) return undefined;
@@ -362,12 +425,24 @@ export function selectEarningsOverviewSharedValues(
   };
 }
 
-/** 將共用設定帶入等級／討價還價欄位；刻意不觸碰工具自己的 Buff。 */
-export function applyEarningsOverviewSharedValues(
+/** 將玩家等級帶入目前試算；不覆寫共享裝備值或工具 BUFF。 */
+export function applyEarningsOverviewPlayerValues(
   current: EarningsOverviewToolState,
   shared: EarningsOverviewSharedValues,
 ): EarningsOverviewToolState {
-  return { ...current, ...shared };
+  return {
+    ...current,
+    searchLevel: shared.searchLevel,
+    printingLevel: shared.printingLevel,
+    miningLevel: shared.miningLevel,
+  };
+}
+
+export function createEarningsOverviewValues(
+  toolState: EarningsOverviewToolState,
+  shared: EarningsOverviewSharedValues,
+): EarningsOverviewCalculationValues {
+  return { ...toolState, bargainPercent: shared.bargainPercent };
 }
 
 export function parseEarningsOverviewValues(values: EarningsOverviewFormValues): {
@@ -442,7 +517,7 @@ export function calculateEarningsOverviewTool(
 }
 
 interface EarningsOverviewContextValue {
-  readonly values: EarningsOverviewToolState;
+  readonly values: EarningsOverviewCalculationValues;
   readonly errors: EarningsOverviewErrors;
   readonly inputs: EarningsInputs | null;
   readonly result: EarningsCalculation | null;
@@ -454,7 +529,8 @@ interface EarningsOverviewContextValue {
   readonly setValue: (field: EarningsOverviewField, value: string) => void;
   readonly setMixedCrushingCounts: (counts: MixedCrushingCounts) => void;
   readonly setMixedCrushingMode: (mode: MixedCrushingMode) => void;
-  readonly fillFromShared: () => void;
+  readonly fillPlayer: () => void;
+  readonly reset: () => void;
 }
 
 const EarningsOverviewToolContext = createContext<EarningsOverviewContextValue | null>(null);
@@ -478,15 +554,15 @@ export function EarningsOverviewToolProvider({ children }: { children: ReactNode
     {
       validate: isEarningsOverviewToolState,
       normalize: normalizeEarningsOverviewToolState,
-      initialize: () => ({
-        ...selectEarningsOverviewSharedValues(sharedStore.getSnapshot()),
-        mixedCrushingMode: defaultEarningsOverviewToolState.mixedCrushingMode,
-        mixedMedicalCount: defaultEarningsOverviewToolState.mixedMedicalCount,
-        mixedAmmunitionCount: defaultEarningsOverviewToolState.mixedAmmunitionCount,
-        mixedMilitaryCount: defaultEarningsOverviewToolState.mixedMilitaryCount,
-        btcBuffPercent: defaultEarningsOverviewToolState.btcBuffPercent,
-        comparisonMode: 'per-minute',
-      }),
+      initialize: () => {
+        const player = selectEarningsOverviewSharedValues(sharedStore.getSnapshot());
+        return {
+          ...defaultEarningsOverviewToolState,
+          searchLevel: player.searchLevel,
+          printingLevel: player.printingLevel,
+          miningLevel: player.miningLevel,
+        };
+      },
     },
   );
 
@@ -544,16 +620,35 @@ export function EarningsOverviewToolProvider({ children }: { children: ReactNode
     setValues((current) => ({ ...current, mixedCrushingMode: mode }));
   }, [setValues]);
 
-  const fillFromShared = useCallback(() => {
-    setValues((current) => applyEarningsOverviewSharedValues(
+  const fillPlayer = useCallback(() => {
+    setValues((current) => applyEarningsOverviewPlayerValues(
       current,
       selectEarningsOverviewSharedValues(sharedStore.getSnapshot()),
     ));
   }, [setValues, sharedStore]);
 
-  const calculation = useMemo(
-    () => calculateEarningsOverviewTool(values, sharedSnapshot),
+  const reset = useCallback(() => {
+    clearToolState('earnings-overview');
+    const player = selectEarningsOverviewSharedValues(sharedStore.getSnapshot());
+    setValues({
+      ...defaultEarningsOverviewToolState,
+      searchLevel: player.searchLevel,
+      printingLevel: player.printingLevel,
+      miningLevel: player.miningLevel,
+    });
+  }, [setValues, sharedStore]);
+
+  const calculationValues = useMemo(
+    () => createEarningsOverviewValues(
+      values,
+      selectEarningsOverviewSharedValues(sharedSnapshot),
+    ),
     [sharedSnapshot, values],
+  );
+
+  const calculation = useMemo(
+    () => calculateEarningsOverviewTool(calculationValues, sharedSnapshot),
+    [calculationValues, sharedSnapshot],
   );
   const mixedCrushingResult = useMemo(() => {
     if (!calculation.result || mixedCrushingIssue !== null) return null;
@@ -563,7 +658,7 @@ export function EarningsOverviewToolProvider({ children }: { children: ReactNode
   }, [calculation.result, mixedCrushingCounts, mixedCrushingIssue, values.mixedCrushingMode]);
   const contextValue = useMemo(
     () => ({
-      values,
+      values: calculationValues,
       errors: calculation.errors,
       inputs: calculation.inputs,
       result: calculation.result,
@@ -575,20 +670,22 @@ export function EarningsOverviewToolProvider({ children }: { children: ReactNode
       setValue,
       setMixedCrushingCounts,
       setMixedCrushingMode,
-      fillFromShared,
+      fillPlayer,
+      reset,
     }),
     [
       calculation,
-      fillFromShared,
+      calculationValues,
+      fillPlayer,
       mixedCrushingBaseTimeBudgetSeconds,
       mixedCrushingCounts,
       mixedCrushingIssue,
       mixedCrushingResult,
       prices,
+      reset,
       setMixedCrushingCounts,
       setMixedCrushingMode,
       setValue,
-      values,
     ],
   );
 
@@ -610,7 +707,6 @@ function getErrorMessage(
     || error === 'printing-level'
     || error === 'mining-level'
   ) return labels.validationLevel;
-  if (error === 'bargain') return labels.validationBargain;
   if (error === 'btc-buff') return labels.validationBuff;
   if (error === 'comparison-mode') return labels.validationComparisonMode;
   return undefined;
@@ -660,7 +756,7 @@ function EarningsOverviewInputField({
   label,
   labels,
 }: {
-  readonly field: EarningsOverviewField;
+  readonly field: 'searchLevel' | 'printingLevel' | 'miningLevel' | 'btcBuffPercent';
   readonly id: string;
   readonly label: string;
   readonly labels: EarningsOverviewToolLabels;
@@ -669,7 +765,6 @@ function EarningsOverviewInputField({
   const isLevel = field === 'searchLevel'
     || field === 'printingLevel'
     || field === 'miningLevel';
-  const isBargain = field === 'bargainPercent';
 
   if (field === 'btcBuffPercent') {
     return (
@@ -692,14 +787,43 @@ function EarningsOverviewInputField({
       type="number"
       inputMode="numeric"
       min={isLevel ? EARNINGS_LEVEL_MIN : 0}
-      max={isLevel ? EARNINGS_LEVEL_MAX : isBargain ? 40 : 100}
+      max={isLevel ? EARNINGS_LEVEL_MAX : 100}
       step="1"
       value={values[field]}
       placeholder={isLevel ? labels.levelPlaceholder : undefined}
       onChange={(event) => setValue(field, event.target.value)}
       error={getErrorMessage(field, errors, labels)}
-      range={isLevel ? labels.levelRange : isBargain ? labels.bargainRange : labels.buffRange}
+      range={isLevel ? labels.levelRange : labels.buffRange}
       unit={isLevel ? labels.levelUnit : labels.percentUnit}
+    />
+  );
+}
+
+function EarningsOverviewBargainField({
+  value,
+  locale,
+}: {
+  value: string;
+  locale: Locale;
+}) {
+  const store = useSharedUserInputsStore();
+  const sharedFields = getSharedFieldPresentation(locale);
+
+  return (
+    <ToolSharedNumberField
+      id="earnings-overview-bargain-percent"
+      label={sharedFields.bargain.label}
+      sharedLabel={sharedFields.sharedLabel}
+      value={value}
+      min={0}
+      max={40}
+      integer
+      unit={sharedFields.bargain.unit}
+      range={sharedFields.bargain.range}
+      invalidValueMessage={sharedFields.invalidValueMessage}
+      onValueChange={(nextValue) => store.update((current) =>
+        updateSharedEquipmentNumber(current, 'bargainPercent', nextValue),
+      )}
     />
   );
 }
@@ -1239,7 +1363,8 @@ export function EarningsOverviewCalculator({
     setMixedCrushingCounts,
     setMixedCrushingMode,
     setValue,
-    fillFromShared,
+    fillPlayer,
+    reset,
   } = useEarningsOverviewTool();
   const [mixedCrushingDraft, setMixedCrushingDraft] = useState<{
     readonly comparisonMode: EarningsComparisonMode;
@@ -1329,12 +1454,13 @@ export function EarningsOverviewCalculator({
             <div>
               <CardTitle className="site-tool-section-heading">{labels.primaryInputs}</CardTitle>
             </div>
-            <ToolPresetButton
-              type="button"
-              variant="outline"
-              onClick={fillFromShared}
-              icon={<Download aria-hidden="true" />}
-              label={labels.fillShared}
+            <ToolPrimaryActions
+              fillPlayer={{ label: labels.fillPlayer, onClick: fillPlayer }}
+              onReset={() => {
+                setMixedCrushingDraft(null);
+                reset();
+              }}
+              resetLabel={labels.reset}
             />
           </div>
         </CardHeader>
@@ -1359,11 +1485,9 @@ export function EarningsOverviewCalculator({
                 label={labels.miningLevel}
                 labels={labels}
               />
-              <EarningsOverviewInputField
-                field="bargainPercent"
-                id="earnings-overview-bargain-percent"
-                label={labels.bargainPercent}
-                labels={labels}
+              <EarningsOverviewBargainField
+                value={values.bargainPercent}
+                locale={locale}
               />
               <EarningsOverviewInputField
                 field="btcBuffPercent"
@@ -1434,8 +1558,6 @@ export function EarningsOverviewToolPage({
   contextLabel,
   contextPanelLabel,
   contextCloseLabel,
-  labels,
-  locale,
   header,
   headerActions,
   children,

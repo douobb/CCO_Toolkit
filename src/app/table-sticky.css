@@ -74,6 +74,14 @@ table:not([data-sticky-first-column='false'])
   word-break: normal;
 }
 
+/* 長版本識別碼優先自然換行，無分隔符的長字串也不得溢出日期欄。 */
+[data-game-data-version-table] > table:not([data-sticky-first-column='false'])
+  tr
+  > :is(th, td):nth-child(4) {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 [data-game-data-version-table] > table:not([data-sticky-first-column='false'])
   tr
   > :is(th, td):nth-child(6) {

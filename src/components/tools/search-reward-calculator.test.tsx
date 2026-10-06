@@ -8,11 +8,9 @@ import { getMessages } from '@/lib/translations';
 
 import {
   SearchRewardCalculator,
-  SearchRewardSettingsPanel,
   SearchRewardToolProvider,
   createSearchRewardValues,
   selectSearchRewardSharedValues,
-  updateSearchRewardSharedPrice,
 } from './search-reward-calculator';
 
 function renderSearchReward(children: ReactNode) {
@@ -59,23 +57,23 @@ describe('Search Reward calculator presentation', () => {
     expect(markup).toContain('formatted:');
   });
 
-  it('提供工具層級的共用設定帶入按鈕，且欄位不再顯示逐欄位覆寫選項', () => {
+  it('主要輸入只提供玩家帶入與本工具重設，不重複編輯共用價格', () => {
     const labels = getMessages('zh-tw').tools.searchReward;
     const markup = renderSearchReward(
-      <>
-        <SearchRewardCalculator labels={labels} locale="zh-tw" />
-        <SearchRewardSettingsPanel labels={labels} idPrefix="test-settings" />
-      </>,
+      <SearchRewardCalculator labels={labels} locale="zh-tw" />,
     );
 
-    expect(markup).toContain('從共用設定填入');
+    expect(markup).toContain('帶入玩家等級');
+    expect(markup).toContain('重設本工具');
     expect(markup).not.toContain('沿用共用值');
     expect(markup).not.toContain('本工具覆寫');
+    expect(markup).not.toContain('data-tool-fill-shared');
+    expect(markup).not.toContain('mt-price');
+    expect(markup).not.toContain('atp-price');
+    expect(markup).not.toContain('matp-price');
     expect(markup).toContain('id="search-reward-player-level"');
     expect(markup).toContain('value="1"');
-    expect(markup).toContain('id="test-settings-mt-price"');
-    expect(markup).toContain('id="test-settings-atp-price"');
-    expect(markup).toContain('id="test-settings-matp-price"');
+    expect(markup).toContain('data-tool-reset=""');
     expect(markup).toContain('data-breakdown-layout="rows"');
     expect(markup).toContain('@container');
     expect(markup).toContain('@min-[24rem]:grid-cols-2');
@@ -91,7 +89,7 @@ describe('Search Reward calculator presentation', () => {
     expect(markup).not.toContain('text-right font-medium">目前最佳</th>');
   });
 
-  it('將工具本地狀態與物價草稿組合成計算輸入', () => {
+  it('將本地試算等級與 store 物價組合成計算輸入', () => {
     expect(
       createSearchRewardValues(
         {
@@ -99,6 +97,7 @@ describe('Search Reward calculator presentation', () => {
           playerLevel: '60',
         },
         {
+          playerLevel: '1',
           mtPrice: '999',
           atpPrice: '100',
           matpPrice: '777',
@@ -142,18 +141,4 @@ describe('Search Reward calculator presentation', () => {
     });
   });
 
-  it('將工具修改的價格以對應物品寫回共用庫', () => {
-    const next = updateSearchRewardSharedPrice(
-      defaultSharedUserInputs,
-      'mtPrice',
-      72,
-    );
-
-    expect(next.economy.prices).toEqual([
-      { itemId: 'medical-tech-parts', currencyId: 'ai', amount: 72 },
-    ]);
-
-    const restored = updateSearchRewardSharedPrice(next, 'mtPrice', 50);
-    expect(restored.economy.prices).toEqual([]);
-  });
 });

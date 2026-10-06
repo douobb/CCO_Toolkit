@@ -120,6 +120,14 @@ describe('global sticky table styles', () => {
     expect(getDeclarations(firstCellSelector).get('overflow-wrap')).toBe('anywhere');
   });
 
+  it('wraps long data versions without changing the date column or fixed widths', () => {
+    const versionCell = getDeclarations(`${gameDataVersionCellSelector}:nth-child(4)`);
+    expect(versionCell.get('white-space')).toBe('normal');
+    expect(versionCell.get('overflow-wrap')).toBe('anywhere');
+    expect(getDeclarations(gameDataVersionCellSelector).get('white-space')).toBe('nowrap');
+    expect(getDeclarations(gameDataVersionTableSelector).get('table-layout')).toBe('fixed');
+  });
+
   it('assigns a complete 640px mobile column layout only to the earnings table', () => {
     const mobileColumnWidths = Array.from({ length: 5 }, (_, index) =>
       getMediaDeclarations('(max-width: 639.98px)', earningsOverviewColumnSelector(index + 1))
