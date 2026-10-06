@@ -29,6 +29,17 @@ function renderBlackMarket(children: ReactNode) {
 }
 
 describe('Black market calculator presentation', () => {
+  it.each([
+    ['zh-tw', '已達回本（Lv.${level}）'],
+    ['zh-cn', '已达回本（Lv.${level}）'],
+    ['en', 'Break-even reached (Lv.${level})'],
+  ] as const)('黑市與挖礦共用自然等價的 %s 回本等級文案', (locale, expected) => {
+    const messages = getMessages(locale);
+
+    expect(messages.tools.blackMarket.breakEvenCurrent).toBe(expected);
+    expect(messages.tools.mining.breakEvenCurrent).toBe(expected);
+  });
+
   it('依 HEAD 的分區結構呈現等級、共用換算、BUFF 與四種快取數量', () => {
     const labels = getMessages('zh-tw').tools.blackMarket;
     const markup = renderBlackMarket(

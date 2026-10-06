@@ -402,6 +402,28 @@ function formatTemplate(template: string, replacements: Record<string, string | 
   );
 }
 
+function withUnbrokenBreakEvenLevel(message: string, level: number): ReactNode {
+  const levelText = `Lv.${level}`;
+  const levelIndex = message.indexOf(levelText);
+  if (levelIndex < 0) return message;
+
+  const openingIndex = message[levelIndex - 1] === '（' || message[levelIndex - 1] === '('
+    ? levelIndex - 1
+    : levelIndex;
+  const levelEndIndex = levelIndex + levelText.length;
+  const groupEndIndex = message[levelEndIndex] === '）' || message[levelEndIndex] === ')'
+    ? levelEndIndex + 1
+    : levelEndIndex;
+
+  return (
+    <>
+      {message.slice(0, openingIndex)}
+      <span className="whitespace-nowrap">{message.slice(openingIndex, groupEndIndex)}</span>
+      {message.slice(groupEndIndex)}
+    </>
+  );
+}
+
 function getErrorMessage(
   field: MiningField,
   errors: MiningErrors,
@@ -531,9 +553,14 @@ function formatBreakEven(
   result: Pick<MiningBtcResult, 'miningLevel' | 'breakEvenLevel' | 'levelsToBreakEven'> |
     Pick<AiCraftResult, 'miningLevel' | 'breakEvenLevel' | 'levelsToBreakEven'>,
   labels: MiningToolLabels,
-) {
+): ReactNode {
   if (result.breakEvenLevel === null) return labels.notAvailable;
-  if (result.breakEvenLevel <= result.miningLevel) return labels.breakEvenCurrent;
+  if (result.breakEvenLevel <= result.miningLevel) {
+    return withUnbrokenBreakEvenLevel(
+      formatTemplate(labels.breakEvenCurrent, { level: result.breakEvenLevel }),
+      result.breakEvenLevel,
+    );
+  }
 
   return formatTemplate(labels.breakEvenAt, {
     level: result.breakEvenLevel,

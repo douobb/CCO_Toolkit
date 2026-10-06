@@ -125,6 +125,15 @@ function getBreakdownSection(container: HTMLElement, card: MiningCardId): HTMLEl
   return section;
 }
 
+function getBreakEvenValue(container: HTMLElement, card: MiningCardId): HTMLElement {
+  const labels = getMessages('en').tools.mining;
+  const row = Array.from(getBreakdownSection(container, card).querySelectorAll('dl > div'))
+    .find((item) => item.querySelector('dt')?.textContent?.trim() === labels.breakEven);
+  const value = row?.querySelector<HTMLElement>('dd');
+  if (!value) throw new Error(`找不到 ${card} 回本結果`);
+  return value;
+}
+
 function setInputValue(container: HTMLElement, id: string, value: string): void {
   const input = container.querySelector<HTMLInputElement>(`#${id}`);
   if (!input) throw new Error(`找不到挖礦輸入欄位：${id}`);
@@ -153,6 +162,92 @@ async function clickElement(element: HTMLElement): Promise<void> {
 }
 
 describe('Mining calculator presentation', () => {
+  it('依 BTC 與 AI 實際回本門檻顯示未達、等於、已超過與無法回本狀態', async () => {
+    const { container, store } = await mountMiningCalculator();
+
+    await act(async () => {
+      store.update((current) => ({
+        ...current,
+        economy: {
+          ...current.economy,
+          prices: [
+            { itemId: 'hash', currencyId: 'ai', amount: 0.05 },
+            { itemId: 'tech-scrap', currencyId: 'ai', amount: 99 },
+          ],
+          exchangeRates: [{ id: 'btc-per-ai', value: 36_240 }],
+        },
+      }));
+      await Promise.resolve();
+    });
+
+    await updateInputs(container, [
+      ['mining-level', '1'],
+      ['mining-cortex-bonus', '0'],
+      ['mining-trade-exploit', '0'],
+    ]);
+
+    const sharedValues = selectMiningSharedValues(store.getSnapshot());
+    const calculateAtLevel = (miningLevel: number) => calculateMiningTool({
+      ...sharedValues,
+      miningLevel: String(miningLevel),
+      cortexBonusPercent: '0',
+      tradeExploitPercent: '0',
+    });
+    expect(calculateAtLevel(1).result).toMatchObject({
+      btc: { breakEvenLevel: 2 },
+      aiCraft: { breakEvenLevel: 11 },
+    });
+    expect(getBreakEvenValue(container, 'btc').textContent).toBe('Lv.2 (+ 1)');
+    expect(getBreakEvenValue(container, 'ai').textContent).toBe('Lv.11 (+ 10)');
+
+    await updateInputs(container, [['mining-level', '2']]);
+    expect(getBreakEvenValue(container, 'btc').textContent).toBe('Break-even reached (Lv.2)');
+    expect(getBreakEvenValue(container, 'ai').textContent).toBe('Lv.11 (+ 9)');
+
+    await updateInputs(container, [['mining-level', '11']]);
+    expect(getBreakEvenValue(container, 'btc').textContent).toBe('Break-even reached (Lv.2)');
+    expect(getBreakEvenValue(container, 'ai').textContent).toBe('Break-even reached (Lv.11)');
+    expect(getBreakEvenValue(container, 'ai').querySelector('span.whitespace-nowrap')?.textContent)
+      .toBe('(Lv.11)');
+
+    await updateInputs(container, [['mining-level', '12']]);
+    expect(getBreakEvenValue(container, 'btc').textContent).toBe('Break-even reached (Lv.2)');
+    expect(getBreakEvenValue(container, 'ai').textContent).toBe('Break-even reached (Lv.11)');
+    expect(calculateAtLevel(12).result).toMatchObject({
+      btc: { breakEvenLevel: 2 },
+      aiCraft: { breakEvenLevel: 11 },
+    });
+
+    await act(async () => {
+      store.update((current) => ({
+        ...current,
+        economy: {
+          ...current.economy,
+          prices: [
+            { itemId: 'hash', currencyId: 'ai', amount: 10 },
+            { itemId: 'tech-scrap', currencyId: 'ai', amount: 5000 },
+          ],
+          exchangeRates: [{ id: 'btc-per-ai', value: 1_000_000 }],
+        },
+      }));
+      await Promise.resolve();
+    });
+
+    const unavailableCalculation = calculateMiningTool({
+      ...selectMiningSharedValues(store.getSnapshot()),
+      miningLevel: '12',
+      cortexBonusPercent: '0',
+      tradeExploitPercent: '0',
+    });
+    expect(unavailableCalculation.result).toMatchObject({
+      btc: { breakEvenLevel: null },
+      aiCraft: { breakEvenLevel: null },
+    });
+    const labels = getMessages('en').tools.mining;
+    expect(getBreakEvenValue(container, 'btc').textContent).toBe(labels.notAvailable);
+    expect(getBreakEvenValue(container, 'ai').textContent).toBe(labels.notAvailable);
+  });
+
   it('使用共用 Tool UI 呈現主要輸入與兩組收益結果', () => {
     const labels = getMessages('zh-tw').tools.mining;
     const markup = renderMining(
