@@ -153,7 +153,7 @@ describe('root language route', () => {
     expect(metadata.metadataBase).toEqual(new URL('https://douobb.github.io'));
     expect(metadata.alternates?.canonical).toBe('/CCO_Toolkit/zh-tw');
     expect(metadata.openGraph).toMatchObject({
-      title: 'CCO Toolkit｜CyberCode Online 工具與教學',
+      title: 'CCO Toolkit',
       description: 'CyberCode Online 的計算工具與遊戲教學。',
       type: 'website',
       siteName: 'CCO Toolkit',
@@ -163,7 +163,7 @@ describe('root language route', () => {
     });
     expect(metadata.twitter).toMatchObject({
       card: 'summary_large_image',
-      title: 'CCO Toolkit｜CyberCode Online 工具與教學',
+      title: 'CCO Toolkit',
       description: 'CyberCode Online 的計算工具與遊戲教學。',
       images: [{ url: '/CCO_Toolkit/images/brand/og-cover.jpg', alt: '賽博城市' }],
     });

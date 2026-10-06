@@ -50,7 +50,7 @@ const shareCases = [
   [
     'zh-tw',
     {
-      title: 'CCO Toolkit｜CyberCode Online 工具與教學',
+      title: 'CCO Toolkit',
       description: 'CyberCode Online 的計算工具與遊戲教學。',
       imageAlt: '賽博城市',
       locale: 'zh_TW',
@@ -59,7 +59,7 @@ const shareCases = [
   [
     'zh-cn',
     {
-      title: 'CCO Toolkit｜CyberCode Online 工具与教程',
+      title: 'CCO Toolkit',
       description: 'CyberCode Online 的计算工具与游戏教程。',
       imageAlt: '赛博城市',
       locale: 'zh_CN',
@@ -68,7 +68,7 @@ const shareCases = [
   [
     'en',
     {
-      title: 'CCO Toolkit | CyberCode Online Tools and Guides',
+      title: 'CCO Toolkit',
       description: 'CyberCode Online calculators and game guides.',
       imageAlt: 'Cyberpunk city',
       locale: 'en_US',

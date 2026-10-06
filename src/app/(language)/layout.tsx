@@ -11,10 +11,11 @@ import {
 import '@/app/global.css';
 
 const homepageShareCopy = getHomepageShareCopy(defaultLocale);
+const homepageSeoTitle = 'CCO Toolkit｜CyberCode Online 工具與教學';
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'),
-  title: homepageShareCopy.title,
+  title: homepageSeoTitle,
   description: homepageShareCopy.description,
   ...getHomepageShareMetadata(defaultLocale),
   alternates: {

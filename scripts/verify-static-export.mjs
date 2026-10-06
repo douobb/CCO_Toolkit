@@ -376,14 +376,14 @@ for (const [
   );
 }
 
-function assertMetadata(html, key, expected) {
+function assertMetadata(html, key, expected, description = '分享標籤') {
   const tags = html.match(/<meta\b[^>]*>/gi) ?? [];
   const found = tags.some((tag) => {
     const name = tag.match(/\b(?:name|property)="([^"]+)"/i)?.[1];
     const content = tag.match(/\bcontent="([^"]*)"/i)?.[1];
     return name === key && content === expected;
   });
-  if (!found) throw new Error(`根網址分享標籤缺少或不正確：${key}=${expected}`);
+  if (!found) throw new Error(`${description} 缺少或不正確：${key}=${expected}`);
 }
 
 function assertTitlePhaseBootstrap(html, description) {
@@ -631,7 +631,21 @@ for (const relativePath of [
 
 const rootPage = await readOutput('index.html');
 const siteOrigin = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
-assertMetadata(rootPage, 'og:title', 'CCO Toolkit｜CyberCode Online 工具與教學');
+const homepageSharePages = [
+  [rootPage, '根首頁'],
+  [await readOutput('zh-tw/index.html'), '繁中首頁'],
+  [await readOutput('zh-cn/index.html'), '簡中首頁'],
+  [await readOutput('en/index.html'), '英文首頁'],
+];
+for (const [page, description] of homepageSharePages) {
+  assertMetadata(page, 'og:title', 'CCO Toolkit', `${description} OG title`);
+  assertMetadata(page, 'twitter:title', 'CCO Toolkit', `${description} Twitter title`);
+}
+assertIncludes(
+  rootPage,
+  '<title>CCO Toolkit｜CyberCode Online 工具與教學</title>',
+  '根首頁瀏覽器 SEO title 維持原文',
+);
 assertMetadata(rootPage, 'og:description', 'CyberCode Online 的計算工具與遊戲教學。');
 assertMetadata(rootPage, 'og:image', new URL(publicPath('/images/brand/og-cover.jpg'), siteOrigin).href);
 assertMetadata(rootPage, 'og:image:type', 'image/jpeg');
