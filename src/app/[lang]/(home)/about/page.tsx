@@ -13,7 +13,7 @@ import { defaultLocale, getHtmlLanguage, isLocale, locales, type Locale } from '
 import { getMessages } from '@/lib/translations';
 import { getPageImageUrl, source } from '@/lib/source';
 import { getAcceptedContributionRecords } from '@/lib/site-content';
-import { siteOgCover } from '@/lib/site-brand';
+import { siteAboutBanner } from '@/lib/site-brand';
 import { withBasePath } from '@/lib/site-paths';
 
 import styles from '../page-hero.module.css';
@@ -79,7 +79,7 @@ export default async function AboutPage({
           <div className="mx-auto h-full w-full max-w-5xl px-6 sm:px-10">
             <div className={styles.artworkFrame}>
               <Image
-                src={withBasePath(siteOgCover.path)}
+                src={withBasePath(siteAboutBanner.path)}
                 alt=""
                 fill
                 sizes="(min-width: 976px) 896px, (min-width: 640px) calc(100vw - 80px), calc(100vw - 48px)"

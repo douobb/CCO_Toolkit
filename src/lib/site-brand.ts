@@ -10,6 +10,13 @@ export const siteOgCover = {
   type: 'image/jpeg',
 } as const;
 
+export const siteAboutBanner = {
+  path: '/images/brand/about-banner.webp',
+  width: 1200,
+  height: 630,
+  type: 'image/webp',
+} as const;
+
 const homepageShareCopy = {
   'zh-tw': {
     title: 'CCO Toolkit｜CyberCode Online 工具與教學',

@@ -9,7 +9,7 @@ import AboutPage from './about/page';
 import aboutStyles from './page-hero.module.css';
 import { generateMetadata } from './page';
 import RecommendationsPage from './recommendations/page';
-import { getHomepageShareMetadata, siteOgCover } from '@/lib/site-brand';
+import { getHomepageShareMetadata, siteAboutBanner, siteOgCover } from '@/lib/site-brand';
 import { toLocalePath, type Locale } from '@/lib/i18n';
 import { withBasePath } from '@/lib/site-paths';
 
@@ -41,6 +41,9 @@ vi.mock('fumadocs-ui/layouts/docs/page', () => ({
 vi.mock('fumadocs-ui/mdx', () => ({ createRelativeLink: () => () => null }));
 
 const imagePath = fileURLToPath(new URL('../../../../public/images/brand/og-cover.jpg', import.meta.url));
+const aboutBannerImagePath = fileURLToPath(
+  new URL('../../../../public/images/brand/about-banner.webp', import.meta.url),
+);
 const aboutStylesPath = new URL('./page-hero.module.css', import.meta.url);
 
 const shareCases = [
@@ -125,7 +128,32 @@ describe('homepage share metadata and OG cover', () => {
   it('serves a 1200×630 JPEG within a reasonable size', async () => {
     const [image, file] = await Promise.all([sharp(imagePath).metadata(), stat(imagePath)]);
 
-    expect(image).toMatchObject({ width: 1200, height: 630, format: 'jpeg' });
+    expect(image).toMatchObject({
+      width: siteOgCover.width,
+      height: siteOgCover.height,
+      format: 'jpeg',
+    });
+    expect(file.size).toBeGreaterThan(0);
+    expect(file.size).toBeLessThan(512 * 1024);
+  });
+
+  it('serves a 1200×630 WebP for the About banner within a reasonable size', async () => {
+    const [image, file] = await Promise.all([
+      sharp(aboutBannerImagePath).metadata(),
+      stat(aboutBannerImagePath),
+    ]);
+
+    expect(siteAboutBanner).toMatchObject({
+      path: '/images/brand/about-banner.webp',
+      width: 1200,
+      height: 630,
+      type: 'image/webp',
+    });
+    expect(image).toMatchObject({
+      width: siteAboutBanner.width,
+      height: siteAboutBanner.height,
+      format: 'webp',
+    });
     expect(file.size).toBeGreaterThan(0);
     expect(file.size).toBeLessThan(512 * 1024);
   });
@@ -137,7 +165,8 @@ describe('homepage share metadata and OG cover', () => {
       params: Promise.resolve({ lang: 'zh-tw' }),
     });
     const recommendationsMarkup = renderToStaticMarkup(recommendations);
-    const imageUrl = withBasePath(siteOgCover.path);
+    const aboutBannerUrl = withBasePath(siteAboutBanner.path);
+    const ogCoverUrl = withBasePath(siteOgCover.path);
     const heroStart = markup.indexOf(`<header class="${aboutStyles.hero} dark">`);
     const heroEnd = markup.indexOf('</header>', heroStart);
     const heroMarkup = markup.slice(heroStart, heroEnd);
@@ -179,11 +208,13 @@ describe('homepage share metadata and OG cover', () => {
     expect(heroEnd).toBeGreaterThan(heroStart);
     expect(heroOpeningTag).toContain('dark');
     expect(heroOpeningTag).not.toMatch(/max-w|rounded|border|shadow/);
-    expect(markup).toContain(
-      `${aboutStyles.heroContent} mx-auto w-full max-w-5xl px-6 pt-12 pb-10 sm:px-10 sm:pt-16`,
-    );
+    const heroContentLayout =
+      `${aboutStyles.heroContent} mx-auto w-full max-w-5xl px-6 pt-12 pb-10 sm:px-10 sm:pt-16`;
+    expect(markup).toContain(heroContentLayout);
+    expect(recommendationsMarkup).toContain(heroContentLayout);
     expect(markup).toContain('mx-auto w-full max-w-5xl flex-1 px-6 pb-12 sm:px-10 sm:pb-16');
     expect(markup).toContain('<article class="max-w-4xl border-t pt-8">');
+    expect(recommendationsMarkup).toContain('<article class="max-w-5xl border-t pt-8">');
     expect(heroMarkup).toContain('max-w-3xl');
     expect(artworkIndex).toBeGreaterThanOrEqual(0);
     expect(artworkOuterIndex).toBeGreaterThan(artworkIndex);
@@ -221,8 +252,10 @@ describe('homepage share metadata and OG cover', () => {
     expect(markup.match(/<img\b/g)).toHaveLength(1);
     expect(articleIndex).toBeGreaterThan(heroEnd);
     expect(
-      markup.includes(`src="${imageUrl}"`) || markup.includes(`url=${encodeURIComponent(imageUrl)}`),
+      heroMarkup.includes(`src="${aboutBannerUrl}"`)
+      || heroMarkup.includes(`url=${encodeURIComponent(aboutBannerUrl)}`),
     ).toBe(true);
+    expect(heroMarkup).not.toContain(`url=${encodeURIComponent(ogCoverUrl)}`);
     expect(markup).toContain('alt=""');
     expect(markup).toContain('data-nimg="fill"');
     expect(markup).toContain(

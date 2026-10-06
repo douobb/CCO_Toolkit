@@ -107,7 +107,7 @@ export default async function RecommendationsPage({
         </div>
       </header>
       <div className="mx-auto w-full max-w-5xl flex-1 px-6 pb-12 sm:px-10 sm:pb-16">
-        <article className="mt-10 max-w-5xl border-t pt-8">
+        <article className="max-w-5xl border-t pt-8">
           <DocsBody>
             <MDX
               components={getMDXComponents({

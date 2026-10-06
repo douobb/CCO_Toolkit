@@ -323,11 +323,20 @@ function assertRenderedTableRowsHaveColumnCount(
   });
 }
 
-for (const [fileName, description, expectedColumnHeaders, expectedRows] of [
+for (const [
+  fileName,
+  description,
+  expectedColumnHeaders,
+  expectedColumnWidths,
+  expectedMinWidth,
+  expectedRows,
+] of [
   [
     'index.mdx',
     '繁中工具總覽來源',
     ['輸入類型', '用途', '位置'],
+    ['7rem', '16rem', '22rem'],
+    '45rem',
     [
       ['主要輸入', '調整本次試算條件', '工具頁的主要輸入區塊'],
       ['共用設定', '管理玩家、裝備與物價', '點擊「玩家與計算設定」圖示'],
@@ -337,6 +346,8 @@ for (const [fileName, description, expectedColumnHeaders, expectedRows] of [
     'index.zh-cn.mdx',
     '簡中工具總覽來源',
     ['输入类型', '用途', '位置'],
+    ['7rem', '16rem', '22rem'],
+    '45rem',
     [
       ['主要输入', '调整本次试算条件', '工具页的主要输入区块'],
       ['共享设置', '管理玩家、装备与物价', '点击“玩家与计算设置”图标'],
@@ -346,6 +357,8 @@ for (const [fileName, description, expectedColumnHeaders, expectedRows] of [
     'index.en.mdx',
     '英文工具總覽來源',
     ['Input type', 'Purpose', 'Location'],
+    ['10rem', '16rem', '22rem'],
+    '48rem',
     [
       ['Primary inputs', 'Adjust this calculation’s inputs', 'Main input section on the tool page'],
       ['Shared settings', 'Manage player, equipment, and prices', 'Click the “Player & calculation settings” icon'],
@@ -357,9 +370,9 @@ for (const [fileName, description, expectedColumnHeaders, expectedRows] of [
     source,
     description,
     expectedColumnHeaders,
-    ['10rem', '16rem', '22rem'],
+    expectedColumnWidths,
     expectedRows,
-    '48rem',
+    expectedMinWidth,
   );
 }
 
@@ -487,6 +500,7 @@ const requiredFiles = [
   'zh-tw/recommendations/index.html',
   'zh-cn/recommendations/index.html',
   'en/recommendations/index.html',
+  'images/brand/about-banner.webp',
   'images/brand/ciallo-banner.webp',
   'api/search',
   'llms.txt',
@@ -620,10 +634,17 @@ const siteOrigin = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
 assertMetadata(rootPage, 'og:title', 'CCO Toolkit｜CyberCode Online 工具與教學');
 assertMetadata(rootPage, 'og:description', 'CyberCode Online 的計算工具與遊戲教學。');
 assertMetadata(rootPage, 'og:image', new URL(publicPath('/images/brand/og-cover.jpg'), siteOrigin).href);
+assertMetadata(rootPage, 'og:image:type', 'image/jpeg');
 assertMetadata(rootPage, 'og:image:width', '1200');
 assertMetadata(rootPage, 'og:image:height', '630');
 assertMetadata(rootPage, 'og:image:alt', '賽博城市');
 assertMetadata(rootPage, 'twitter:card', 'summary_large_image');
+assertMetadata(rootPage, 'twitter:image', new URL(publicPath('/images/brand/og-cover.jpg'), siteOrigin).href);
+assertMetadata(rootPage, 'twitter:image:alt', '賽博城市');
+for (const readmeFile of ['README.md', 'README.en.md']) {
+  const readme = await readFile(path.join(projectRoot, readmeFile), 'utf8');
+  assertIncludes(readme, '![CCO Toolkit](public/images/brand/og-cover.jpg)', `${readmeFile} 分享封面應維持 JPG`);
+}
 assertIncludes(rootPage, `href="${publicPath('/zh-tw/tools/')}"`, '根網址直接顯示繁中首頁工具入口');
 assertIncludes(rootPage, `<link rel="canonical" href="${new URL(publicPath('/zh-tw/'), siteOrigin).href}"`, '根首頁 canonical 指向繁中首頁');
 assertExcludes(rootPage, '正在前往繁體中文首頁', '根網址不再顯示跳轉畫面');
@@ -857,6 +878,23 @@ assertExcludes(
   'About 私人內容規範連結',
 );
 assertIncludes(aboutPage, 'href="./privacy"', 'About 隱私說明連結');
+const aboutBannerPath = publicPath('/images/brand/about-banner.webp');
+const aboutBannerPosition = Math.max(
+  aboutPage.indexOf(aboutBannerPath),
+  aboutPage.indexOf(encodeURIComponent(aboutBannerPath)),
+);
+if (aboutBannerPosition < 0) {
+  throw new Error(`About 頁未引用含 Pages basePath 的 WebP：${aboutBannerPath}`);
+}
+const aboutHeroStart = aboutPage.lastIndexOf('<header', aboutBannerPosition);
+const aboutHeroEnd = aboutPage.indexOf('</header>', aboutBannerPosition);
+if (aboutHeroStart < 0 || aboutHeroEnd < 0) throw new Error('About WebP 不在橫幅 header 中');
+const aboutHero = aboutPage.slice(aboutHeroStart, aboutHeroEnd);
+assertExcludes(
+  aboutHero,
+  encodeURIComponent(publicPath('/images/brand/og-cover.jpg')),
+  'About 橫幅不應重用 OG 分享 JPG',
+);
 const privacyNoticeSources = [
   {
     locale: '繁中',
@@ -1058,16 +1096,21 @@ for (const [page, description, removedNote] of [
   assertIncludes(page, description, '玩家設定精簡描述');
   assertExcludes(page, removedNote, '玩家設定已移除的瀏覽器儲存提示');
 }
-for (const page of [toolPage, simplifiedToolPage, englishToolPage]) {
-  assertIncludes(page, 'min-w-[48rem]', '工具輸入位置表格最小寬度');
+for (const [page, minWidth] of [
+  [toolPage, '45rem'],
+  [simplifiedToolPage, '45rem'],
+  [englishToolPage, '48rem'],
+]) {
+  assertIncludes(page, `min-w-[${minWidth}]`, '工具輸入位置表格最小寬度');
   assertIncludes(page, 'overflow-x-auto', '工具輸入位置表格水平捲動');
 }
-for (const [page, ariaLabel, description, columnHeaders, rows] of [
+for (const [page, ariaLabel, description, columnHeaders, columnWidths, rows] of [
   [
     toolPage,
     '工具輸入位置',
     '繁中工具總覽表格',
     ['輸入類型', '用途', '位置'],
+    ['7rem', '16rem', '22rem'],
     [
       ['主要輸入', '調整本次試算條件', '工具頁的主要輸入區塊'],
       ['共用設定', '管理玩家、裝備與物價', '點擊「玩家與計算設定」圖示'],
@@ -1078,6 +1121,7 @@ for (const [page, ariaLabel, description, columnHeaders, rows] of [
     '工具输入位置',
     '簡中工具總覽表格',
     ['输入类型', '用途', '位置'],
+    ['7rem', '16rem', '22rem'],
     [
       ['主要输入', '调整本次试算条件', '工具页的主要输入区块'],
       ['共享设置', '管理玩家、装备与物价', '点击“玩家与计算设置”图标'],
@@ -1088,6 +1132,7 @@ for (const [page, ariaLabel, description, columnHeaders, rows] of [
     'Tool input locations',
     '英文工具總覽表格',
     ['Input type', 'Purpose', 'Location'],
+    ['10rem', '16rem', '22rem'],
     [
       ['Primary inputs', 'Adjust this calculation’s inputs', 'Main input section on the tool page'],
       ['Shared settings', 'Manage player, equipment, and prices', 'Click the “Player & calculation settings” icon'],
@@ -1098,7 +1143,7 @@ for (const [page, ariaLabel, description, columnHeaders, rows] of [
     page,
     ariaLabel,
     columnHeaders,
-    ['10rem', '16rem', '22rem'],
+    columnWidths,
     rows,
     description,
   );
@@ -1108,26 +1153,38 @@ assertIncludes(toolPage, '不會送到伺服器', '工具總覽隱私說明');
 assertIncludes(englishToolPage, 'stored only in the current browser', '英文工具總覽隱私說明');
 assertIncludes(englishToolPage, 'not sent to a server', '英文工具總覽隱私說明');
 for (const expected of [
-  '目前 8 個工具側欄只保留目錄（TOC）；輸入集中在以下兩處：',
   '標示「共用」的欄位與共用設定同步，修改會套用至其他工具。',
   '「重設本工具」只還原本工具試算欄位、模式、BUFF 預設值或表單／篩選狀態，不修改共用資料，也不清除背包庫存或開箱紀錄。',
 ]) {
   assertIncludes(toolPage, expected, '繁中工具總覽輸入位置與重設說明');
 }
+assertExcludes(
+  toolPage,
+  '目前 8 個工具側欄只保留目錄（TOC）；輸入集中在以下兩處：',
+  '繁中工具總覽已移除重複輸入位置前言',
+);
 for (const expected of [
-  '目前 8 个工具侧栏只保留目录（TOC）；输入集中在以下两处：',
   '标记为“共享”的字段与共享设置同步，修改会应用到其他工具。',
   '“重置本工具”只还原本工具试算字段、模式、默认 BUFF 或表单／筛选状态，不修改共享数据，也不清除背包库存或开箱记录。',
 ]) {
   assertIncludes(simplifiedToolPage, expected, '簡中工具總覽輸入位置與重設說明');
 }
+assertExcludes(
+  simplifiedToolPage,
+  '目前 8 个工具侧栏只保留目录（TOC）；输入集中在以下两处：',
+  '簡中工具總覽已移除重複輸入位置前言',
+);
 for (const expected of [
-  'The sidebars of all eight tools currently contain only the table of contents (TOC); inputs are available in these two places:',
   'Fields marked “Shared” sync with shared settings, and changes apply to other tools.',
   '<strong>Reset this tool</strong> restores only that tool&#x27;s trial inputs, mode, default buffs, or form and filter state; it does not change shared data or clear backpack inventory or loot-box records.',
 ]) {
   assertIncludes(englishToolPage, expected, '英文工具總覽輸入位置與重設說明');
 }
+assertExcludes(
+  englishToolPage,
+  'The sidebars of all eight tools currently contain only the table of contents (TOC); inputs are available in these two places:',
+  '英文工具總覽已移除重複輸入位置前言',
+);
 for (const [page, ariaLabel, description, obsoleteDescriptions] of [
   [toolPage, '工具輸入位置', '繁中工具總覽表格', ['本工具設定']],
   [simplifiedToolPage, '工具输入位置', '簡中工具總覽表格', ['本工具设置']],
