@@ -224,8 +224,8 @@ describe('TASK-403 Game Data catalog', () => {
         expect(dataSet.updatedAt).toBe('2026-10-05');
       } else if (dataSet.datasetId === 'earnings-activities') {
         expect(dataSet.schemaVersion).toBe('1.1.0');
-        expect(dataSet.dataVersion).toBe('cco-found-pack-btc-cost-update-2026-10-05');
-        expect(dataSet.updatedAt).toBe('2026-10-05');
+        expect(dataSet.dataVersion).toBe('cco-found-black-market-batch-size-update-2026-10-07');
+        expect(dataSet.updatedAt).toBe('2026-10-07');
       } else {
         expect(dataSet.dataVersion).toBe('cco-found-initial-snapshot');
         expect(['2026-08-28', '2026-08-29', '2026-09-19']).toContain(dataSet.updatedAt);

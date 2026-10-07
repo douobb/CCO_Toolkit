@@ -102,6 +102,70 @@ describe('earnings calculator', () => {
     expect(employeeOfficeCase ?? 0).toBeLessThan(0);
   });
 
+  it('黑市快取每批 4,000；飛逝依時間計數並封頂，單位每分鐘收益不隨批量放大', () => {
+    const prices = resolveMarketPrices();
+    const perMinute = calculateEarnings(validInputs, prices)!;
+    const shortElapsed = calculateEarnings(validInputs, prices, {
+      comparisonMode: 'elapsed-15',
+    })!;
+    const cappedElapsed = calculateEarnings(validInputs, prices, {
+      comparisonMode: 'elapsed-105',
+    })!;
+    const cacheIds = [
+      'black-market-trash',
+      'black-market-common',
+      'black-market-high-quality',
+      'black-market-rare',
+    ] as const;
+
+    for (const id of cacheIds) {
+      const definition = earningsActivityCatalog.find((activity) => activity.id === id);
+      const batchResult = perMinute.activities.find((activity) => activity.id === id);
+      const shortResult = shortElapsed.activities.find((activity) => activity.id === id);
+      const cappedResult = cappedElapsed.activities.find((activity) => activity.id === id);
+      if (!definition || !batchResult || !shortResult || !cappedResult) {
+        throw new Error(`缺少黑市快取收益資料：${id}`);
+      }
+
+      expect(definition.kind).toBe('black-market');
+      expect(definition).toMatchObject({ batchSize: 4_000, baseUnitSeconds: 7 });
+      expect(batchResult.batchSize).toBe(4_000);
+      expect(batchResult.effectiveBatchMinutes).toBeCloseTo(
+        definition.baseUnitSeconds
+          * (100 - perMinute.timeReductionPercent)
+          / 100
+          * 4_000
+          / 60,
+        12,
+      );
+      expect(batchResult.unitNetAi).not.toBeNull();
+      const unitNetAi = batchResult.unitNetAi ?? 0;
+      const effectiveUnitSeconds = definition.baseUnitSeconds
+        * (100 - perMinute.timeReductionPercent)
+        / 100;
+      expect(batchResult.batchNetAi).toBeCloseTo(unitNetAi * 4_000, 12);
+      expect(batchResult.aiPerMinute).toBeCloseTo(unitNetAi * 60 / effectiveUnitSeconds, 12);
+
+      const expectedShortCount = Math.floor(
+        (15 * 60 * 100)
+          / (definition.baseUnitSeconds * (100 - shortElapsed.timeReductionPercent)),
+      );
+      expect(shortResult.elapsed).toMatchObject({
+        count: expectedShortCount,
+        usedSeconds: expectedShortCount * effectiveUnitSeconds,
+      });
+      expect(shortResult.elapsed?.totalNetAi)
+        .toBeCloseTo((shortResult.unitNetAi ?? 0) * expectedShortCount, 12);
+
+      expect(cappedResult.elapsed).toMatchObject({
+        count: 4_000,
+        usedSeconds: effectiveUnitSeconds * 4_000,
+      });
+      expect(cappedResult.elapsed?.totalNetAi)
+        .toBeCloseTo((cappedResult.unitNetAi ?? 0) * 4_000, 12);
+    }
+  });
+
   it('自訂 BTC/AI 匯率會改變 BTC 費用的 AI 扣除額', () => {
     const defaultPrices = resolveMarketPrices();
     const customPrices = resolveMarketPrices({

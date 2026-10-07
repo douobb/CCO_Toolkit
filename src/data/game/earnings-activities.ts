@@ -16,8 +16,8 @@ const earningsActivitiesDataEnvelope = {
   datasetId: 'earnings-activities',
   domain: 'activities',
   schemaVersion: '1.1.0',
-  dataVersion: 'cco-found-pack-btc-cost-update-2026-10-05',
-  updatedAt: '2026-10-05',
+  dataVersion: 'cco-found-black-market-batch-size-update-2026-10-07',
+  updatedAt: '2026-10-07',
   sources: [ccoFoundDataSource],
   payload: rawEarningsActivities,
 } as const;

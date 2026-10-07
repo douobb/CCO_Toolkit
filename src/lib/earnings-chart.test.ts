@@ -101,8 +101,15 @@ describe('Earnings chart data', () => {
     )!;
 
     expect(point.values.search).toBe(getResult(expected, 'search').aiPerMinute);
-    expect(point.values['black-market-trash'])
-      .toBe(getResult(expected, 'black-market-trash').aiPerMinute);
+    for (const activityId of [
+      'black-market-trash',
+      'black-market-common',
+      'black-market-high-quality',
+      'black-market-rare',
+    ] as const) {
+      expect(point.values[activityId]).not.toBeNull();
+      expect(point.values[activityId]).toBe(getResult(expected, activityId).aiPerMinute);
+    }
     expect(point.values.mining).toBe(getResult(expected, 'mining').aiPerMinute);
   });
 

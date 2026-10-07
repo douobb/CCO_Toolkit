@@ -87,9 +87,9 @@ const dataUpdateBaselines = {
   },
   'earnings-activities': {
     schemaVersion: '1.1.0',
-    dataVersion: 'cco-found-pack-btc-cost-update-2026-10-05',
-    updatedAt: '2026-10-05',
-    payloadSha256: 'c94b6fa2b1ed08d0b9ac677b99fced3ce70f22e3963fae02b5f774cc1c3c1cb2',
+    dataVersion: 'cco-found-black-market-batch-size-update-2026-10-07',
+    updatedAt: '2026-10-07',
+    payloadSha256: '18486a9cb3bbc54180e70c2237032a2ebe73f87adf7b17b13bec7866d942e5e1',
   },
   'loot-boxes': {
     schemaVersion: '1.0.0',

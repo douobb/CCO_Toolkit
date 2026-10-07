@@ -13,7 +13,7 @@
       "labels": { "zh-tw": "黑市・廢棄快取", "zh-cn": "黑市・废弃图纸", "en": "Black Market · Trash Cache" },
       "kind": "black-market",
       "quality": "trash",
-      "batchSize": 1000,
+      "batchSize": 4000,
       "baseUnitSeconds": 7,
       "verification": "confirmed"
     },
@@ -22,7 +22,7 @@
       "labels": { "zh-tw": "黑市・普通快取", "zh-cn": "黑市・普通图纸", "en": "Black Market · Common Cache" },
       "kind": "black-market",
       "quality": "common",
-      "batchSize": 1000,
+      "batchSize": 4000,
       "baseUnitSeconds": 7,
       "verification": "confirmed"
     },
@@ -31,7 +31,7 @@
       "labels": { "zh-tw": "黑市・高級快取", "zh-cn": "黑市・高级图纸", "en": "Black Market · High Quality Cache" },
       "kind": "black-market",
       "quality": "high-quality",
-      "batchSize": 1000,
+      "batchSize": 4000,
       "baseUnitSeconds": 7,
       "verification": "confirmed"
     },
@@ -40,7 +40,7 @@
       "labels": { "zh-tw": "黑市・稀有快取", "zh-cn": "黑市・稀有图纸", "en": "Black Market · Rare Cache" },
       "kind": "black-market",
       "quality": "rare",
-      "batchSize": 1000,
+      "batchSize": 4000,
       "baseUnitSeconds": 7,
       "verification": "confirmed"
     },
